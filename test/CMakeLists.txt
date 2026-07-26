@@ -50,4 +50,4 @@ function(p101_add_test name)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
-p101_add_test(test_arguments test_arguments.c)
+p101_add_test(test_arguments test_arguments.c ../src/cli.c ../src/parse.c)
