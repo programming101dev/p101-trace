@@ -19,7 +19,7 @@ void p101_trace_print_tree_event(const struct p101_env *env, struct p101_error *
         depth = (event->kind == CALL_EVENT_ENTER && proc->depth > 0) ? proc->depth - 1U : 0U;
     }
 
-    p101_printf(env, err, "pid %ld ", event->pid);
+    p101_printf(env, err, "#%zu pid %ld ", event->sequence, event->pid);
 
     for(size_t i = 0; i < depth; i++)
     {
@@ -52,7 +52,18 @@ void p101_trace_print_tree_event(const struct p101_env *env, struct p101_error *
 
 void p101_trace_print_flat_event(const struct p101_env *env, struct p101_error *err, const struct call_event *event)
 {
-    p101_printf(env, err, "%ld\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", event->pid, (event->kind == CALL_EVENT_ENTER) ? "ENTER" : "EXIT", event->function_name, event->call_name, event->arguments, event->result, event->line_number, event->file_name);
+    p101_printf(env,
+                err,
+                "%zu\t%ld\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
+                event->sequence,
+                event->pid,
+                (event->kind == CALL_EVENT_ENTER) ? "ENTER" : "EXIT",
+                event->function_name,
+                event->call_name,
+                event->arguments,
+                event->result,
+                event->line_number,
+                event->file_name);
 }
 
 void p101_trace_report_summary(const struct p101_env *env, struct p101_error *err, const struct model *model)
@@ -60,6 +71,7 @@ void p101_trace_report_summary(const struct p101_env *env, struct p101_error *er
     struct site_rank *ranks;
 
     ranks = NULL;
+    p101_printf(env, err, "event_schema=p101-event-format-v1 event_id_policy=derived-1-based-input-sequence\n");
     p101_printf(env, err, "records=%zu processes=%zu skipped=%zu malformed=%zu bad_version=%zu\n", model->records, model->proc_count, model->skipped, model->malformed, model->bad_version);
 
     for(size_t i = 0; i < model->proc_count; i++)

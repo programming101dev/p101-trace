@@ -74,6 +74,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
 
         if(status == LINE_OK)
         {
+            event.sequence = model->records + 1U;
             p101_trace_model_ingest(env, err, model, &event);
 
             if(args->mode == TRACE_MODE_TREE)

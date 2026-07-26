@@ -1,6 +1,8 @@
 #ifndef P101_TRACE_EVENT_H
 #define P101_TRACE_EVENT_H
 
+#include <stddef.h>
+
 enum call_event_kind
 {
     CALL_EVENT_ENTER = 0,
@@ -17,6 +19,7 @@ enum line_status
 
 struct call_event
 {
+    size_t               sequence;
     long                 pid;
     enum call_event_kind kind;
     int                  line_number;

@@ -40,6 +40,11 @@ Tabs, newlines, carriage returns, and backslashes inside fields are escaped by
 `P101CALL` are skipped, which means a log stream can be shared with ordinary
 program output.
 
+`p101-trace` adds a derived event number to rendered output. It is the 1-based
+sequence of successfully parsed `P101CALL` records in that log file, useful for
+linking a trace line back to `p101-report` context without changing the raw v1
+record format.
+
 ## Options
 
     p101-trace [-h] [-v] [-s|-f] [file]
