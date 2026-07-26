@@ -72,6 +72,14 @@ execute. `p101-trace` shows the dynamic story that led there:
 That gives students a readable bridge from source code to runtime behavior
 without requiring platform-specific tracing permissions or OS-specific tools.
 
+## Boundaries
+
+`p101-trace` is wrapper-level tracing, not OS tracing. It reads `P101CALL`
+records, so direct calls, uninstrumented functions, third-party library internals,
+and kernel-level activity are invisible unless code emits compatible p101 call
+events. The rendered tree is a readable reconstruction of one log, not proof of
+every path the program can take.
+
 ## The workflow
 
 1. **Configure** — `./change-compiler.sh -c clang` picks the compiler and

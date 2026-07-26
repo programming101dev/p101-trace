@@ -1,21 +1,17 @@
 /*
  * libFuzzer harness for p101-trace's argument parser
- * (src/main.c: parse_arguments()). This fuzzes the code YOU write, not a
+ * (src/cli.c: p101_trace_parse_arguments()). This fuzzes the code YOU write, not a
  * library function.
  *
- * parse_arguments() is static, so we #include the whole main.c: that makes it
- * visible AND compiles it WITH the fuzzer instrumentation, which is what makes
- * this coverage-guided (watch "cov:" climb) instead of a blind black-box run.
- * Two collisions are handled by -D defines in fuzz/CMakeLists.txt, so nothing
- * in src/ has to change:
+ * p101_exit() is handled by a -D define in fuzz/CMakeLists.txt, so nothing in
+ * src/ has to change:
  *
- *   -Dmain=p101_unused_main       the program's main() would clash with
- *                                 libFuzzer's own main(); it is renamed aside.
  *   -Dp101_exit=p101_fuzz_exit    usage() is _Noreturn and calls p101_exit().
  *                                 Redirect it into a longjmp so -h is a normal
  *                                 input, not the end of the fuzz process.
  */
-#include <p101_c/p101_setjmp.h>
+#include "cli.h"
+#include "constants.h"
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <setjmp.h>
@@ -23,20 +19,19 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* longjmp target for the redirected p101_exit(). */
 static jmp_buf g_fuzz_exit_jmp;
 
-/* The code under test. main -> p101_unused_main, p101_exit -> p101_fuzz_exit. */
-#include "../src/main.c"
-
 /* The redirected p101_exit(): unwind back into the harness instead of terminating
  * the process. _Noreturn matches p101_exit()'s contract (usage() is _Noreturn);
- * p101_longjmp guarantees it never actually returns. */
+ * longjmp guarantees it never actually returns. */
 _Noreturn void p101_fuzz_exit(const struct p101_env *env, int code)
 {
+    (void)env;
     (void)code;
-    p101_longjmp(env, g_fuzz_exit_jmp, 1);
+    longjmp(g_fuzz_exit_jmp, 1);
 }
 
 #define FUZZ_MAX_ARGS 64
@@ -104,17 +99,16 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     p101_memset(env, &args, 0, sizeof(args));
     args.mode = TRACE_MODE_TREE;
 
-    /* If parse_arguments takes the -h path, usage()->p101_exit()->p101_longjmp lands
+    /* If parse_arguments takes the -h path, usage()->p101_exit()->longjmp lands
      * here with a non-zero return -- a normal outcome, not a crash. */
-    if(p101_setjmp(env, g_fuzz_exit_jmp) == 0)
+    if(setjmp(g_fuzz_exit_jmp) == 0)
     {
-        parse_arguments(env, err, argc, argv, &args);
+        p101_trace_parse_arguments(env, err, argc, argv, &args);
 
         if(p101_error_has_no_error(err))
         {
-            check_arguments(env, err, &args);
+            p101_trace_check_arguments(env, err, &args);
         }
-
     }
 
 done:

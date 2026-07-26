@@ -2,11 +2,8 @@
 # selects a fuzzer-capable clang and passes it as CMAKE_C_COMPILER. Separate
 # from the strict analysis build.
 #
-# TARGET: the template's OWN argument parser (src/main.c: parse_arguments()).
-# fuzz_parse.c #includes ../src/main.c so the static parser is visible AND gets
-# compiled with -fsanitize=fuzzer (=> coverage-guided). We rename the program's
-# main() aside and redirect p101_exit() into a longjmp (usage() is _Noreturn)
-# via the two -D defines below, so nothing in src/ has to change.
+# TARGET: p101-trace's argument parser in src/cli.c. p101_exit() is redirected
+# into a longjmp so usage paths are normal fuzz inputs, not process exits.
 cmake_minimum_required(VERSION 3.14)
 project(p101_fuzz C)
 
@@ -41,12 +38,11 @@ endforeach ()
 # the fuzzer's inputs are checked for memory errors and UB.
 set(_FUZZ_FLAGS -fsanitize=fuzzer,address,undefined -g -O1)
 
-add_executable(fuzz fuzz_parse.c)
+add_executable(fuzz fuzz_parse.c "${CMAKE_CURRENT_SOURCE_DIR}/../src/cli.c")
 
-# Reach the static parser without editing src/: rename the program's main() out
-# of libFuzzer's way, and redirect p101_exit() (usage() is _Noreturn) so the -h
-# path is a longjmp, not a fake crash.
-target_compile_definitions(fuzz PRIVATE main=p101_unused_main p101_exit=p101_fuzz_exit P101_SUPPRESS_USAGE_TEXT)
+# Redirect p101_exit() (usage() is _Noreturn) so the -h path is a longjmp, not
+# a fake crash.
+target_compile_definitions(fuzz PRIVATE p101_exit=p101_fuzz_exit P101_SUPPRESS_USAGE_TEXT)
 
 target_include_directories(fuzz PRIVATE ${_P101_INC_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/../include")
 target_compile_options(fuzz PRIVATE ${_FUZZ_FLAGS})
