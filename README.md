@@ -56,7 +56,7 @@ I/O/tool failure.
 
 ## Why this is useful
 
-`resource-tracker` tells you what leaked. `p101-error-path-walk` makes error paths
+`p101-resource-tracker` tells you what leaked. `p101-error-path-walk` makes error paths
 execute. `p101-trace` shows the dynamic story that led there:
 
     pid 123 main()  [main.c:10]
