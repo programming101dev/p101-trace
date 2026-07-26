@@ -14,6 +14,8 @@ struct call_site
     int    line_number;
     size_t enters;
     size_t exits;
+    size_t exits_with_result;
+    size_t likely_failures;
 };
 
 struct proc_state

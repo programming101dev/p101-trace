@@ -7,8 +7,8 @@ p101-traced call your code elects to record, plus any student function that uses
 the same tracing rules.
 
 The default view is an indented call tree. `-s` prints aggregate counts by call
-site, and `-f` prints normalized flat records that are easier for scripts to
-consume.
+site, including result-bearing exits and failure-looking return values, and `-f`
+prints normalized flat records that are easier for scripts to consume.
 
 ## Producing a call log
 
@@ -46,7 +46,7 @@ program output.
 
 With no file, or with `-`, it reads standard input.
 
-- `-s` prints summary counts by source call site.
+- `-s` prints summary counts by source call site, with result/suspect columns.
 - `-f` prints one normalized tab-separated line per parsed event.
 - `-v` enables p101 tracing inside `p101-trace` itself.
 

@@ -3,7 +3,10 @@
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <p101_posix/p101_string.h>
+#include <stdbool.h>
 #include <stdlib.h>
+
+static bool result_looks_like_failure(const struct p101_env *env, const char *result);
 
 struct model *p101_trace_model_create(const struct p101_env *env, struct p101_error *err)
 {
@@ -128,6 +131,16 @@ void p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err,
     {
         site->exits++;
 
+        if(p101_strcmp(env, event->result, "-") != 0)
+        {
+            site->exits_with_result++;
+
+            if(result_looks_like_failure(env, event->result))
+            {
+                site->likely_failures++;
+            }
+        }
+
         if(proc->depth == 0)
         {
             proc->unmatched_exits++;
@@ -195,18 +208,40 @@ size_t p101_trace_intern_site(const struct p101_env *env, struct p101_error *err
             goto done;
         }
 
-        model->sites[index].call_name     = call_name;
-        model->sites[index].file_name     = file_name;
-        model->sites[index].function_name = function_name;
-        model->sites[index].line_number   = event->line_number;
-        model->sites[index].enters        = 0;
-        model->sites[index].exits         = 0;
+        model->sites[index].call_name         = call_name;
+        model->sites[index].file_name         = file_name;
+        model->sites[index].function_name     = function_name;
+        model->sites[index].line_number       = event->line_number;
+        model->sites[index].enters            = 0;
+        model->sites[index].exits             = 0;
+        model->sites[index].exits_with_result = 0;
+        model->sites[index].likely_failures   = 0;
     }
 
     model->site_count++;
 
 done:
     return index;
+}
+
+static bool result_looks_like_failure(const struct p101_env *env, const char *result)
+{
+    bool ret_val;
+
+    ret_val = false;
+
+    if(result == NULL || p101_strcmp(env, result, "-") == 0)
+    {
+        goto done;
+    }
+
+    if(p101_strcmp(env, result, "NULL") == 0 || p101_strcmp(env, result, "null") == 0 || p101_strcmp(env, result, "false") == 0 || p101_strcmp(env, result, "EOF") == 0 || result[0] == '-')
+    {
+        ret_val = true;
+    }
+
+done:
+    return ret_val;
 }
 
 struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_error *err, struct model *model, long pid)

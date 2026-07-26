@@ -86,14 +86,25 @@ void p101_trace_report_summary(const struct p101_env *env, struct p101_error *er
     }
 
     p101_qsort(env, ranks, model->site_count, sizeof(struct site_rank), compare_ranks);
-    p101_fputs(env, err, "enter  exit  total  where\n", stdout);
+    p101_fputs(env, err, "enter  exit  result  suspect  total  where\n", stdout);
 
     for(size_t i = 0; i < model->site_count; i++)
     {
         const struct call_site *site;
 
         site = &model->sites[ranks[i].index];
-        p101_printf(env, err, "%5zu  %4zu  %5zu  %s at %s:%d in %s()\n", site->enters, site->exits, site->enters + site->exits, site->call_name, site->file_name, site->line_number, site->function_name);
+        p101_printf(env,
+                    err,
+                    "%5zu  %4zu  %6zu  %7zu  %5zu  %s at %s:%d in %s()\n",
+                    site->enters,
+                    site->exits,
+                    site->exits_with_result,
+                    site->likely_failures,
+                    site->enters + site->exits,
+                    site->call_name,
+                    site->file_name,
+                    site->line_number,
+                    site->function_name);
     }
 
 done:

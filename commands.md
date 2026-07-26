@@ -9,7 +9,7 @@ Run `./change-compiler.sh -c <compiler>` once before building.
 | --- | --- |
 | `p101-trace calls.log` | Render `P101CALL` records as an indented call tree |
 | `p101-trace < calls.log` | Same, reading standard input (`-` works too) |
-| `p101-trace -s calls.log` | Summarize calls by source call site |
+| `p101-trace -s calls.log` | Summarize calls by source call site, including result/suspect-return counts |
 | `p101-trace -f calls.log` | Print normalized flat tab-separated events |
 | `p101-trace -v calls.log` | Verbose: trace `p101-trace` itself while it runs |
 
