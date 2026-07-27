@@ -5,8 +5,77 @@
 #include "report.h"
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_string.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+enum input_line_status
+{
+    INPUT_LINE_EOF = 0,
+    INPUT_LINE_OK,
+    INPUT_LINE_MALFORMED
+};
+
+static enum input_line_status p101_trace_read_line(const struct p101_env *env, struct p101_error *err, FILE *stream, char *line, size_t line_size);
+
+static enum input_line_status p101_trace_read_line(const struct p101_env *env, struct p101_error *err, FILE *stream, char *line, size_t line_size)
+{
+    bool   saw_byte;
+    bool   malformed;
+    size_t length;
+
+    saw_byte  = false;
+    malformed = false;
+    length    = 0U;
+
+    while(p101_error_has_no_error(err))
+    {
+        int ch;
+
+        ch = p101_fgetc(env, err, stream);
+
+        if(ch == EOF)
+        {
+            break;
+        }
+
+        saw_byte = true;
+
+        if(ch == '\0')
+        {
+            malformed = true;
+        }
+
+        if(length + 1U < line_size)
+        {
+            line[length] = (char)ch;
+            length++;
+        }
+        else
+        {
+            malformed = true;
+        }
+
+        if(ch == '\n')
+        {
+            break;
+        }
+    }
+
+    if(!saw_byte)
+    {
+        return INPUT_LINE_EOF;
+    }
+
+    line[(length < line_size) ? length : (line_size - 1U)] = '\0';
+
+    if(malformed)
+    {
+        return INPUT_LINE_MALFORMED;
+    }
+
+    return INPUT_LINE_OK;
+}
 
 int p101_trace_run(const struct p101_env *env, struct p101_error *err, const struct arguments *args)
 {
@@ -35,37 +104,31 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
         goto done;
     }
 
-    while(p101_fgets(env, err, line, (int)sizeof(line), stream) != NULL)
+    while(p101_error_has_no_error(err))
     {
-        struct call_event event;
-        enum line_status  status;
-        size_t            length;
+        struct call_event      event;
+        enum line_status       status;
+        enum input_line_status line_status;
 
-        if(p101_error_has_error(err))
+        line_status = p101_trace_read_line(env, err, stream, line, sizeof(line));
+
+        if(line_status == INPUT_LINE_EOF)
         {
-            goto done;
+            break;
         }
 
-        length = p101_strlen(env, line);
-
-        if(length == sizeof(line) - 1U && line[length - 1U] != '\n')
+        if(line_status == INPUT_LINE_MALFORMED)
         {
-            enum line_status long_line_status;
-            int              c;
+            enum line_status malformed_status;
 
-            do
-            {
-                c = p101_fgetc(env, err, stream);
-            } while(c != '\n' && c != EOF);
-
-            long_line_status = LINE_OTHER;
+            malformed_status = LINE_OTHER;
 
             if(p101_trace_call_line_is_ours(env, line))
             {
-                long_line_status = LINE_MALFORMED;
+                malformed_status = LINE_MALFORMED;
             }
 
-            p101_trace_model_count_line(model, long_line_status);
+            p101_trace_model_count_line(model, malformed_status);
             continue;
         }
 

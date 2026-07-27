@@ -2,12 +2,18 @@
 #include "constants.h"
 #include "errors.h"
 #include "parse.h"
+#include "runner.h"
 #include "unity.h"
+#include <p101_c/p101_stdio.h>
 #include <p101_c/p101_string.h>
 #include <p101_env/env.h>
 #include <p101_error/error.h>
+#include <p101_posix/p101_stdio.h>
+#include <p101_posix/p101_stdlib.h>
 #include <p101_posix/p101_unistd.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 static struct p101_error *error;
 static struct p101_env   *env;
@@ -107,6 +113,50 @@ static void test_parse_call_line_skips_other_records(void)
     TEST_ASSERT_EQUAL_INT(LINE_OTHER, status);
 }
 
+static void write_temp_bytes(char *path, size_t path_size, const char *bytes, size_t byte_count)
+{
+    FILE *stream;
+    int   fd;
+
+    p101_strncpy(env, path, "/tmp/p101-trace-test-XXXXXX", path_size);
+    path[path_size - 1U] = '\0';
+
+    fd = p101_mkstemp(env, error, path);
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+    TEST_ASSERT_NOT_EQUAL(-1, fd);
+
+    stream = p101_fdopen(env, error, fd, "wb");
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+    TEST_ASSERT_NOT_NULL(stream);
+
+    TEST_ASSERT_EQUAL_UINT(byte_count, p101_fwrite(env, error, bytes, 1U, byte_count, stream));
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+
+    p101_fclose(env, error, stream);
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+}
+
+static void test_runner_counts_embedded_nul_call_record_as_malformed(void)
+{
+    static const char bytes[] = {'P', '1', '0', '1', 'C', 'A', 'L', 'L', '\t', '1', '\t', '4', '2', '\0', '\t', 'E', 'N', 'T', 'E', 'R', '\t', '1', '7', '\t', 'm', 'a', 'i', 'n', '\t', 'p', '1', '0', '1', '_', 'o', 'p', 'e', 'n', '\t', '-', '\t', '-', '\t', 's', 'e', 'r', 'v', 'e', 'r', '.', 'c', '\n'};
+    char              path[256];
+    struct arguments  args;
+    int               status;
+
+    p101_memset(env, &args, 0, sizeof(args));
+    write_temp_bytes(path, sizeof(path), bytes, sizeof(bytes));
+
+    args.mode     = TRACE_MODE_SUMMARY;
+    args.log_name = path;
+
+    status = p101_trace_run(env, error, &args);
+
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+    TEST_ASSERT_EQUAL_INT(EXIT_FINDINGS, status);
+
+    p101_unlink(env, error, path);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -115,5 +165,6 @@ int main(void)
     RUN_TEST(test_parse_call_line_accepts_enter_record);
     RUN_TEST(test_parse_call_line_rejects_bad_version);
     RUN_TEST(test_parse_call_line_skips_other_records);
+    RUN_TEST(test_runner_counts_embedded_nul_call_record_as_malformed);
     return UNITY_END();
 }
