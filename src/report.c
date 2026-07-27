@@ -71,7 +71,7 @@ void p101_trace_report_summary(const struct p101_env *env, struct p101_error *er
     struct site_rank *ranks;
 
     ranks = NULL;
-    p101_printf(env, err, "event_schema=p101-event-format-v1 event_id_policy=derived-1-based-input-sequence\n");
+    p101_printf(env, err, "event_schema=p101-event-format-v1-v2 event_id_policy=derived-1-based-input-sequence\n");
     p101_printf(env, err, "records=%zu processes=%zu skipped=%zu malformed=%zu bad_version=%zu\n", model->records, model->proc_count, model->skipped, model->malformed, model->bad_version);
 
     for(size_t i = 0; i < model->proc_count; i++)

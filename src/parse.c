@@ -4,7 +4,11 @@
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
+
+static bool p101_trace_parse_size_field(const char *text, size_t *out);
+static bool p101_trace_parse_optional_size_field(const struct p101_env *env, const char *text);
 
 enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *line, struct call_event *event)
 {
@@ -43,9 +47,38 @@ enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *li
         }
     }
 
-    cursor               = line + (sizeof(CALL_PREFIX) - 1U);
-    version_text         = p101_trace_split_tab(&cursor);
-    pid_text             = p101_trace_split_tab(&cursor);
+    cursor       = line + (sizeof(CALL_PREFIX) - 1U);
+    version_text = p101_trace_split_tab(&cursor);
+
+    if(!p101_trace_parse_long_field(version_text, 0, LONG_MAX, &version))
+    {
+        goto done;
+    }
+
+    if(version < CALL_LOG_VERSION_MIN || version > CALL_LOG_VERSION_MAX)
+    {
+        status = LINE_BAD_VERSION;
+        goto done;
+    }
+
+    pid_text = p101_trace_split_tab(&cursor);
+
+    if(version == CALL_LOG_VERSION_MAX)
+    {
+        const char *sequence_text;
+        const char *monotonic_text;
+        const char *wall_text;
+
+        sequence_text  = p101_trace_split_tab(&cursor);
+        monotonic_text = p101_trace_split_tab(&cursor);
+        wall_text      = p101_trace_split_tab(&cursor);
+
+        if(!p101_trace_parse_optional_size_field(env, sequence_text) || !p101_trace_parse_optional_size_field(env, monotonic_text) || !p101_trace_parse_optional_size_field(env, wall_text))
+        {
+            goto done;
+        }
+    }
+
     kind_text            = p101_trace_split_tab(&cursor);
     line_text            = p101_trace_split_tab(&cursor);
     event->function_name = p101_trace_split_tab(&cursor);
@@ -56,17 +89,6 @@ enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *li
 
     if(event->function_name == NULL || event->call_name == NULL || event->arguments == NULL || event->result == NULL || event->file_name == NULL || cursor != NULL)
     {
-        goto done;
-    }
-
-    if(!p101_trace_parse_long_field(version_text, 0, LONG_MAX, &version))
-    {
-        goto done;
-    }
-
-    if(version != CALL_LOG_VERSION)
-    {
-        status = LINE_BAD_VERSION;
         goto done;
     }
 
@@ -184,4 +206,63 @@ bool p101_trace_parse_long_field(const char *text, long min, long max, long *out
 
 done:
     return result;
+}
+
+static bool p101_trace_parse_size_field(const char *text, size_t *out)
+{
+    const char *cursor;
+    size_t      value;
+    bool        result;
+
+    cursor = text;
+    value  = 0U;
+    result = false;
+
+    if(cursor == NULL || *cursor == '\0')
+    {
+        goto done;
+    }
+
+    while(*cursor != '\0')
+    {
+        size_t digit;
+
+        if(*cursor < '0' || *cursor > '9')
+        {
+            goto done;
+        }
+
+        digit = (size_t)(*cursor - '0');
+
+        if(value > (SIZE_MAX - digit) / (size_t)DECIMAL_BASE)
+        {
+            goto done;
+        }
+
+        value = (value * (size_t)DECIMAL_BASE) + digit;
+        cursor++;
+    }
+
+    *out   = value;
+    result = true;
+
+done:
+    return result;
+}
+
+static bool p101_trace_parse_optional_size_field(const struct p101_env *env, const char *text)
+{
+    size_t ignored;
+
+    if(text == NULL || text[0] == '\0')
+    {
+        return false;
+    }
+
+    if(p101_strcmp(env, text, "-") == 0)
+    {
+        return true;
+    }
+
+    return p101_trace_parse_size_field(text, &ignored);
 }

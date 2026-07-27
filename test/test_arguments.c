@@ -91,9 +91,25 @@ static void test_parse_call_line_accepts_enter_record(void)
     TEST_ASSERT_EQUAL_STRING("server.c", event.file_name);
 }
 
+static void test_parse_call_line_accepts_v2_record(void)
+{
+    char              line[] = "P101CALL\t2\t42\t1\t100\t200\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
+    struct call_event event;
+    enum line_status  status;
+
+    status = p101_trace_parse_call_line(env, line, &event);
+
+    TEST_ASSERT_EQUAL_INT(LINE_OK, status);
+    TEST_ASSERT_EQUAL_INT64(42, event.pid);
+    TEST_ASSERT_EQUAL_INT(CALL_EVENT_EXIT, event.kind);
+    TEST_ASSERT_EQUAL_INT(17, event.line_number);
+    TEST_ASSERT_EQUAL_STRING("p101_open", event.call_name);
+    TEST_ASSERT_EQUAL_STRING("3", event.result);
+}
+
 static void test_parse_call_line_rejects_bad_version(void)
 {
-    char              line[] = "P101CALL\t2\t42\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
+    char              line[] = "P101CALL\t3\t42\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -163,6 +179,7 @@ int main(void)
     RUN_TEST(test_parse_accepts_summary_mode_and_log_path);
     RUN_TEST(test_parse_rejects_competing_modes);
     RUN_TEST(test_parse_call_line_accepts_enter_record);
+    RUN_TEST(test_parse_call_line_accepts_v2_record);
     RUN_TEST(test_parse_call_line_rejects_bad_version);
     RUN_TEST(test_parse_call_line_skips_other_records);
     RUN_TEST(test_runner_counts_embedded_nul_call_record_as_malformed);
