@@ -5,77 +5,9 @@
 #include "report.h"
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_string.h>
-#include <stdbool.h>
+#include <p101_env/env.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-enum input_line_status
-{
-    INPUT_LINE_EOF = 0,
-    INPUT_LINE_OK,
-    INPUT_LINE_MALFORMED
-};
-
-static enum input_line_status p101_trace_read_line(const struct p101_env *env, struct p101_error *err, FILE *stream, char *line, size_t line_size);
-
-static enum input_line_status p101_trace_read_line(const struct p101_env *env, struct p101_error *err, FILE *stream, char *line, size_t line_size)
-{
-    bool   saw_byte;
-    bool   malformed;
-    size_t length;
-
-    saw_byte  = false;
-    malformed = false;
-    length    = 0U;
-
-    while(p101_error_has_no_error(err))
-    {
-        int ch;
-
-        ch = p101_fgetc(env, err, stream);
-
-        if(ch == EOF)
-        {
-            break;
-        }
-
-        saw_byte = true;
-
-        if(ch == '\0')
-        {
-            malformed = true;
-        }
-
-        if(length + 1U < line_size)
-        {
-            line[length] = (char)ch;
-            length++;
-        }
-        else
-        {
-            malformed = true;
-        }
-
-        if(ch == '\n')
-        {
-            break;
-        }
-    }
-
-    if(!saw_byte)
-    {
-        return INPUT_LINE_EOF;
-    }
-
-    line[(length < line_size) ? length : (line_size - 1U)] = '\0';
-
-    if(malformed)
-    {
-        return INPUT_LINE_MALFORMED;
-    }
-
-    return INPUT_LINE_OK;
-}
 
 int p101_trace_run(const struct p101_env *env, struct p101_error *err, const struct arguments *args)
 {
@@ -106,18 +38,23 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
 
     while(p101_error_has_no_error(err))
     {
-        struct call_event      event;
-        enum line_status       status;
-        enum input_line_status line_status;
+        struct call_event          event;
+        enum line_status           status;
+        p101_env_event_line_status line_status;
 
-        line_status = p101_trace_read_line(env, err, stream, line, sizeof(line));
+        line_status = p101_env_read_event_line(err, stream, line, sizeof(line));
 
-        if(line_status == INPUT_LINE_EOF)
+        if(line_status == P101_ENV_EVENT_LINE_EOF)
         {
             break;
         }
 
-        if(line_status == INPUT_LINE_MALFORMED)
+        if(line_status == P101_ENV_EVENT_LINE_ERROR)
+        {
+            goto done;
+        }
+
+        if(line_status == P101_ENV_EVENT_LINE_MALFORMED)
         {
             enum line_status malformed_status;
 
