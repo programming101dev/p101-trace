@@ -52,9 +52,9 @@ enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *li
     event->call_name     = p101_trace_split_tab(&cursor);
     event->arguments     = p101_trace_split_tab(&cursor);
     event->result        = p101_trace_split_tab(&cursor);
-    event->file_name     = cursor;
+    event->file_name     = p101_trace_split_tab(&cursor);
 
-    if(event->function_name == NULL || event->call_name == NULL || event->arguments == NULL || event->result == NULL || event->file_name == NULL)
+    if(event->function_name == NULL || event->call_name == NULL || event->arguments == NULL || event->result == NULL || event->file_name == NULL || cursor != NULL)
     {
         goto done;
     }

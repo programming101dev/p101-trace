@@ -1,17 +1,10 @@
 /*
- * libFuzzer harness for p101-trace's argument parser
- * (src/cli.c: p101_trace_parse_arguments()). This fuzzes the code YOU write, not a
- * library function.
- *
- * p101_exit() is handled by a -D define in fuzz/CMakeLists.txt, so nothing in
- * src/ has to change:
- *
- *   -Dp101_exit=p101_fuzz_exit    usage() is _Noreturn and calls p101_exit().
- *                                 Redirect it into a longjmp so -h is a normal
- *                                 input, not the end of the fuzz process.
+ * libFuzzer harness for p101-trace's argument parser and call-record parser.
  */
 #include "cli.h"
 #include "constants.h"
+#include "event.h"
+#include "parse.h"
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <setjmp.h>
@@ -99,8 +92,6 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     p101_memset(env, &args, 0, sizeof(args));
     args.mode = TRACE_MODE_TREE;
 
-    /* If parse_arguments takes the -h path, usage()->p101_exit()->longjmp lands
-     * here with a non-zero return -- a normal outcome, not a crash. */
     if(setjmp(g_fuzz_exit_jmp) == 0)
     {
         p101_trace_parse_arguments(env, err, argc, argv, &args);
@@ -108,6 +99,16 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         if(p101_error_has_no_error(err))
         {
             p101_trace_check_arguments(env, err, &args);
+        }
+
+        if(size < LINE_MAX_BYTES)
+        {
+            struct call_event event;
+
+            p101_memcpy(env, buf, data, size);
+            buf[size] = '\0';
+            p101_memset(env, &event, 0, sizeof(event));
+            (void)p101_trace_parse_call_line(env, buf, &event);
         }
     }
 

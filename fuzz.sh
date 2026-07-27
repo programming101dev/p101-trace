@@ -72,10 +72,6 @@ fi
 
 echo ">> fuzzer compiler: $CC"
 bd="fuzz/build-$(basename "$CC")"
-source_dir="$(cd fuzz && pwd)"
-if [ -f "$bd/CMakeCache.txt" ] && ! grep -Fqx "CMAKE_HOME_DIRECTORY:INTERNAL=$source_dir" "$bd/CMakeCache.txt"; then
-  rm -rf "$bd"
-fi
 cmake -S fuzz -B "$bd" -D"${cc_var}=$CC" >/dev/null
 cmake --build "$bd"
 
