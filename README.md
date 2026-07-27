@@ -32,9 +32,11 @@ Use `-` as `P101_CALL_LOG` to write the call stream to stderr.
 
 One record per line, tab separated:
 
-    P101CALL <TAB> 1 <TAB> pid <TAB> ENTER|EXIT <TAB> line <TAB> function <TAB> call <TAB> args <TAB> result <TAB> file
+    P101CALL <TAB> 2 <TAB> pid <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> ENTER|EXIT <TAB> line <TAB> function <TAB> call <TAB> args <TAB> result <TAB> file
 
-The `1` is the format version. `args` and `result` are `-` when not supplied.
+The `2` is the supported format version. `seq` is the per-env event sequence.
+`mono_ns` and `wall_unix_ns` are timestamps, or `-` when unavailable. `args` and
+`result` are `-` when not supplied.
 Tabs, newlines, carriage returns, and backslashes inside fields are escaped by
 `lib_env`, so a record stays one physical line. Lines that do not begin with
 `P101CALL` are skipped, which means a log stream can be shared with ordinary
@@ -42,8 +44,7 @@ program output.
 
 `p101-trace` adds a derived event number to rendered output. It is the 1-based
 sequence of successfully parsed `P101CALL` records in that log file, useful for
-linking a trace line back to `p101-report` context without changing the raw v1
-record format.
+linking a trace line back to `p101-report` context.
 
 ## Options
 

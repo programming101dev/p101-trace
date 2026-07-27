@@ -1,26 +1,16 @@
 #include "parse.h"
-#include "constants.h"
-#include <limits.h>
-#include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdlib.h>
 
-static bool p101_trace_parse_size_field(const char *text, size_t *out);
-static bool p101_trace_parse_optional_size_field(const struct p101_env *env, const char *text);
+static const char CALL_PREFIX[] = "P101CALL\t";
+
+static enum line_status map_parse_status(p101_env_event_parse_status status);
+static enum line_status unknown_parse_status(void);
 
 enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *line, struct call_event *event)
 {
-    char            *cursor;
-    const char      *version_text;
-    const char      *pid_text;
-    const char      *kind_text;
-    const char      *line_text;
-    long             version;
-    long             pid;
-    long             line_number;
-    enum line_status status;
+    enum line_status             status;
+    p101_env_event_parse_status  parse_status;
+    struct p101_env_event_record record;
 
     status = LINE_MALFORMED;
 
@@ -29,240 +19,84 @@ enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *li
         goto done;
     }
 
-    if(p101_strncmp(env, line, CALL_PREFIX, sizeof(CALL_PREFIX) - 1U) != 0)
+    parse_status = p101_env_parse_event_line(line, &record);
+    status       = map_parse_status(parse_status);
+
+    if(status != LINE_OK)
+    {
+        goto done;
+    }
+
+    if(record.record_kind != P101_ENV_EVENT_RECORD_CALL)
     {
         status = LINE_OTHER;
         goto done;
     }
 
-    {
-        size_t length;
+    event->pid           = record.pid;
+    event->kind          = (record.call_kind == P101_ENV_EVENT_CALL_ENTER) ? CALL_EVENT_ENTER : CALL_EVENT_EXIT;
+    event->line_number   = record.line_number;
+    event->function_name = record.function_name;
+    event->call_name     = record.call_name;
+    event->arguments     = record.arguments;
+    event->result        = record.result;
+    event->file_name     = record.file_name;
 
-        length = p101_strlen(env, line);
-
-        while(length > 0U && (line[length - 1U] == '\n' || line[length - 1U] == '\r'))
-        {
-            line[length - 1U] = '\0';
-            length--;
-        }
-    }
-
-    cursor       = line + (sizeof(CALL_PREFIX) - 1U);
-    version_text = p101_trace_split_tab(&cursor);
-
-    if(!p101_trace_parse_long_field(version_text, 0, LONG_MAX, &version))
-    {
-        goto done;
-    }
-
-    if(version < CALL_LOG_VERSION_MIN || version > CALL_LOG_VERSION_MAX)
-    {
-        status = LINE_BAD_VERSION;
-        goto done;
-    }
-
-    pid_text = p101_trace_split_tab(&cursor);
-
-    if(version == CALL_LOG_VERSION_MAX)
-    {
-        const char *sequence_text;
-        const char *monotonic_text;
-        const char *wall_text;
-
-        sequence_text  = p101_trace_split_tab(&cursor);
-        monotonic_text = p101_trace_split_tab(&cursor);
-        wall_text      = p101_trace_split_tab(&cursor);
-
-        if(!p101_trace_parse_optional_size_field(env, sequence_text) || !p101_trace_parse_optional_size_field(env, monotonic_text) || !p101_trace_parse_optional_size_field(env, wall_text))
-        {
-            goto done;
-        }
-    }
-
-    kind_text            = p101_trace_split_tab(&cursor);
-    line_text            = p101_trace_split_tab(&cursor);
-    event->function_name = p101_trace_split_tab(&cursor);
-    event->call_name     = p101_trace_split_tab(&cursor);
-    event->arguments     = p101_trace_split_tab(&cursor);
-    event->result        = p101_trace_split_tab(&cursor);
-    event->file_name     = p101_trace_split_tab(&cursor);
-
-    if(event->function_name == NULL || event->call_name == NULL || event->arguments == NULL || event->result == NULL || event->file_name == NULL || cursor != NULL)
-    {
-        goto done;
-    }
-
-    if(!p101_trace_parse_long_field(pid_text, 0, LONG_MAX, &pid))
-    {
-        goto done;
-    }
-
-    if(!p101_trace_parse_long_field(line_text, 0, INT_MAX, &line_number))
-    {
-        goto done;
-    }
-
-    if(kind_text != NULL && p101_strcmp(env, kind_text, "ENTER") == 0)
-    {
-        event->kind = CALL_EVENT_ENTER;
-    }
-    else if(kind_text != NULL && p101_strcmp(env, kind_text, "EXIT") == 0)
-    {
-        event->kind = CALL_EVENT_EXIT;
-    }
-    else
-    {
-        goto done;
-    }
-
-    event->pid         = pid;
-    event->line_number = (int)line_number;
-    status             = LINE_OK;
+    (void)env;
 
 done:
     return status;
 }
 
+static enum line_status map_parse_status(p101_env_event_parse_status status)
+{
+    enum line_status mapped;
+
+#ifdef __clang__
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wcovered-switch-default"
+#endif
+    switch(status)
+    {
+        case P101_ENV_EVENT_PARSE_OTHER:
+        {
+            mapped = LINE_OTHER;
+            break;
+        }
+        case P101_ENV_EVENT_PARSE_OK:
+        {
+            mapped = LINE_OK;
+            break;
+        }
+        case P101_ENV_EVENT_PARSE_BAD_VERSION:
+        {
+            mapped = LINE_BAD_VERSION;
+            break;
+        }
+        case P101_ENV_EVENT_PARSE_MALFORMED:
+        {
+            mapped = LINE_MALFORMED;
+            break;
+        }
+        default:
+        {
+            mapped = unknown_parse_status();
+            break;
+        }
+    }
+#ifdef __clang__
+    #pragma clang diagnostic pop
+#endif
+
+    return mapped;
+}
+
+static enum line_status unknown_parse_status(void)
+{
+    return LINE_MALFORMED;
+}
+
 bool p101_trace_call_line_is_ours(const struct p101_env *env, const char *line)
 {
     return (p101_strncmp(env, line, CALL_PREFIX, sizeof(CALL_PREFIX) - 1U) == 0) != 0;
-}
-
-char *p101_trace_split_tab(char **cursor)
-{
-    char *start;
-    char *tab;
-
-    start = *cursor;
-
-    if(start == NULL)
-    {
-        goto done;
-    }
-
-    tab = start;
-
-    while(*tab != '\0' && *tab != '\t')
-    {
-        tab++;
-    }
-
-    if(*tab == '\0')
-    {
-        *cursor = NULL;
-    }
-    else
-    {
-        *tab    = '\0';
-        *cursor = tab + 1;
-    }
-
-done:
-    return start;
-}
-
-bool p101_trace_parse_long_field(const char *text, long min, long max, long *out)
-{
-    const char *cursor;
-    long        value;
-    bool        result;
-
-    cursor = text;
-    value  = 0;
-    result = false;
-
-    if(cursor == NULL || *cursor == '\0')
-    {
-        goto done;
-    }
-
-    while(*cursor != '\0')
-    {
-        int digit;
-
-        if(*cursor < '0' || *cursor > '9')
-        {
-            goto done;
-        }
-
-        digit = *cursor - '0';
-
-        if(value > (LONG_MAX - (long)digit) / DECIMAL_BASE)
-        {
-            goto done;
-        }
-
-        value = (value * DECIMAL_BASE) + digit;
-        cursor++;
-    }
-
-    if(value < min || value > max)
-    {
-        goto done;
-    }
-
-    *out   = value;
-    result = true;
-
-done:
-    return result;
-}
-
-static bool p101_trace_parse_size_field(const char *text, size_t *out)
-{
-    const char *cursor;
-    size_t      value;
-    bool        result;
-
-    cursor = text;
-    value  = 0U;
-    result = false;
-
-    if(cursor == NULL || *cursor == '\0')
-    {
-        goto done;
-    }
-
-    while(*cursor != '\0')
-    {
-        size_t digit;
-
-        if(*cursor < '0' || *cursor > '9')
-        {
-            goto done;
-        }
-
-        digit = (size_t)(*cursor - '0');
-
-        if(value > (SIZE_MAX - digit) / (size_t)DECIMAL_BASE)
-        {
-            goto done;
-        }
-
-        value = (value * (size_t)DECIMAL_BASE) + digit;
-        cursor++;
-    }
-
-    *out   = value;
-    result = true;
-
-done:
-    return result;
-}
-
-static bool p101_trace_parse_optional_size_field(const struct p101_env *env, const char *text)
-{
-    size_t ignored;
-
-    if(text == NULL || text[0] == '\0')
-    {
-        return false;
-    }
-
-    if(p101_strcmp(env, text, "-") == 0)
-    {
-        return true;
-    }
-
-    return p101_trace_parse_size_field(text, &ignored);
 }

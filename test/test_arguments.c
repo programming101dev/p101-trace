@@ -74,7 +74,7 @@ static void test_parse_rejects_competing_modes(void)
 
 static void test_parse_call_line_accepts_enter_record(void)
 {
-    char              line[] = "P101CALL\t1\t42\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
+    char              line[] = "P101CALL\t2\t42\t1\t100\t200\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -120,7 +120,7 @@ static void test_parse_call_line_rejects_bad_version(void)
 
 static void test_parse_call_line_skips_other_records(void)
 {
-    char              line[] = "P101FD\t1\t42\tOPEN\t3\t17\tmain\tserver.c\n";
+    char              line[] = "P101FD\t2\t42\t1\t100\t200\tOPEN\t3\t17\tmain\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -154,7 +154,7 @@ static void write_temp_bytes(char *path, size_t path_size, const char *bytes, si
 
 static void test_runner_counts_embedded_nul_call_record_as_malformed(void)
 {
-    static const char bytes[] = {'P', '1', '0', '1', 'C', 'A', 'L', 'L', '\t', '1', '\t', '4', '2', '\0', '\t', 'E', 'N', 'T', 'E', 'R', '\t', '1', '7', '\t', 'm', 'a', 'i', 'n', '\t', 'p', '1', '0', '1', '_', 'o', 'p', 'e', 'n', '\t', '-', '\t', '-', '\t', 's', 'e', 'r', 'v', 'e', 'r', '.', 'c', '\n'};
+    static const char bytes[] = {'P', '1', '0', '1', 'C', 'A', 'L', 'L', '\t', '2', '\t', '4', '2', '\t', '1', '\t', '1', '0', '0', '\t', '2', '0', '0', '\0', '\t', 'E', 'N', 'T', 'E', 'R', '\t', '1', '7', '\t', 'm', 'a', 'i', 'n', '\t', 'p', '1', '0', '1', '_', 'o', 'p', 'e', 'n', '\t', '-', '\t', '-', '\t', 's', 'e', 'r', 'v', 'e', 'r', '.', 'c', '\n'};
     char              path[256];
     struct arguments  args;
     int               status;
