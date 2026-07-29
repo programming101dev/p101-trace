@@ -24,7 +24,7 @@ Or turn on the sink manually:
     #include <p101_env/env.h>
 
     env = p101_env_create(err, NULL);
-    p101_env_set_call_log(env, stderr);
+    p101_env_set_call_log(env, stderr, P101_ENV_CALL_LOG_DEFAULT);
 
 Use `-` as `P101_CALL_LOG` to write the call stream to stderr.
 
