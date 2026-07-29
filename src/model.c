@@ -109,7 +109,7 @@ void p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err,
         goto done;
     }
 
-    proc = p101_trace_find_proc(env, err, model, event->pid);
+    proc = p101_trace_find_proc(env, err, model, event->pid, event->context_id);
 
     if(proc == NULL)
     {
@@ -258,7 +258,7 @@ done:
     return ret_val;
 }
 
-struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_error *err, struct model *model, long pid)
+struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_error *err, struct model *model, long pid, size_t context_id)
 {
     struct proc_state *proc;
 
@@ -266,7 +266,7 @@ struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_
 
     for(size_t i = 0; i < model->proc_count; i++)
     {
-        if(model->procs[i].pid == pid)
+        if(model->procs[i].pid == pid && model->procs[i].context_id == context_id)
         {
             proc = &model->procs[i];
             goto done;
@@ -305,7 +305,8 @@ struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_
 
     proc = &model->procs[model->proc_count];
     p101_memset(env, proc, 0, sizeof(*proc));
-    proc->pid = pid;
+    proc->pid        = pid;
+    proc->context_id = context_id;
     model->proc_count++;
 
 done:

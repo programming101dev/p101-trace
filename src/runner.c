@@ -6,6 +6,7 @@
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_string.h>
 #include <p101_env/env.h>
+#include <p101_tool_event/event.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -38,23 +39,23 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
 
     while(p101_error_has_no_error(err))
     {
-        struct call_event          event;
-        enum line_status           status;
-        p101_env_event_line_status line_status;
+        struct call_event           event;
+        enum line_status            status;
+        p101_tool_event_line_status line_status;
 
-        line_status = p101_env_read_event_line(err, stream, line, sizeof(line));
+        line_status = p101_tool_event_read_line(err, stream, line, sizeof(line));
 
-        if(line_status == P101_ENV_EVENT_LINE_EOF)
+        if(line_status == P101_TOOL_EVENT_LINE_EOF)
         {
             break;
         }
 
-        if(line_status == P101_ENV_EVENT_LINE_ERROR)
+        if(line_status == P101_TOOL_EVENT_LINE_ERROR)
         {
             goto done;
         }
 
-        if(line_status == P101_ENV_EVENT_LINE_MALFORMED)
+        if(line_status == P101_TOOL_EVENT_LINE_MALFORMED)
         {
             enum line_status malformed_status;
 
@@ -81,7 +82,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
             {
                 const struct proc_state *proc;
 
-                proc = p101_trace_find_proc(env, err, model, event.pid);
+                proc = p101_trace_find_proc(env, err, model, event.pid, event.context_id);
 
                 if(proc != NULL)
                 {

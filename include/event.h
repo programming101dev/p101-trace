@@ -21,6 +21,10 @@ struct call_event
 {
     size_t               sequence;
     long                 pid;
+    size_t               context_id;
+    size_t               event_sequence;
+    size_t               monotonic_ns;
+    int                  monotonic_ns_available;
     enum call_event_kind kind;
     int                  line_number;
     const char          *function_name;

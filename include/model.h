@@ -21,6 +21,7 @@ struct call_site
 struct proc_state
 {
     long   pid;
+    size_t context_id;
     size_t depth;
     size_t max_depth;
     size_t unmatched_exits;
@@ -51,6 +52,6 @@ void               p101_trace_model_destroy(const struct p101_env *env, struct m
 void               p101_trace_model_count_line(struct model *model, enum line_status status);
 void               p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err, struct model *model, const struct call_event *event);
 size_t             p101_trace_intern_site(const struct p101_env *env, struct p101_error *err, struct model *model, const struct call_event *event);
-struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_error *err, struct model *model, long pid);
+struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_error *err, struct model *model, long pid, size_t context_id);
 
 #endif    // P101_TRACE_MODEL_H

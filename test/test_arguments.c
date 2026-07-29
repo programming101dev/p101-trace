@@ -74,7 +74,7 @@ static void test_parse_rejects_competing_modes(void)
 
 static void test_parse_call_line_accepts_enter_record(void)
 {
-    char              line[] = "P101CALL\t2\t42\t1\t100\t200\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
+    char              line[] = "P101CALL\t3\t42\t7\t1\t100\t200\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -82,6 +82,7 @@ static void test_parse_call_line_accepts_enter_record(void)
 
     TEST_ASSERT_EQUAL_INT(LINE_OK, status);
     TEST_ASSERT_EQUAL_INT64(42, event.pid);
+    TEST_ASSERT_EQUAL_UINT(7, event.context_id);
     TEST_ASSERT_EQUAL_INT(CALL_EVENT_ENTER, event.kind);
     TEST_ASSERT_EQUAL_INT(17, event.line_number);
     TEST_ASSERT_EQUAL_STRING("main", event.function_name);
@@ -109,7 +110,7 @@ static void test_parse_call_line_accepts_v2_record(void)
 
 static void test_parse_call_line_rejects_bad_version(void)
 {
-    char              line[] = "P101CALL\t3\t42\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
+    char              line[] = "P101CALL\t4\t42\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -121,6 +122,17 @@ static void test_parse_call_line_rejects_bad_version(void)
 static void test_parse_call_line_skips_other_records(void)
 {
     char              line[] = "P101FD\t2\t42\t1\t100\t200\tOPEN\t3\t17\tmain\tserver.c\n";
+    struct call_event event;
+    enum line_status  status;
+
+    status = p101_trace_parse_call_line(env, line, &event);
+
+    TEST_ASSERT_EQUAL_INT(LINE_OTHER, status);
+}
+
+static void test_parse_call_line_skips_generic_resource_records(void)
+{
+    char              line[] = "P101RESOURCE\t3\t42\t7\t1\t100\t200\tACQUIRE\tmapping\t0x1000\t-\t4096\tprivate\t17\tmain\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -182,6 +194,7 @@ int main(void)
     RUN_TEST(test_parse_call_line_accepts_v2_record);
     RUN_TEST(test_parse_call_line_rejects_bad_version);
     RUN_TEST(test_parse_call_line_skips_other_records);
+    RUN_TEST(test_parse_call_line_skips_generic_resource_records);
     RUN_TEST(test_runner_counts_embedded_nul_call_record_as_malformed);
     return UNITY_END();
 }
