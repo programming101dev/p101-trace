@@ -119,6 +119,13 @@ static enum line_status unknown_parse_status(void)
     return LINE_MALFORMED;
 }
 
+#ifdef P101_TRACE_TESTING
+enum line_status p101_trace_test_map_parse_status(int status)
+{
+    return map_parse_status((p101_tool_event_parse_status)status);
+}
+#endif
+
 bool p101_trace_call_line_is_ours(const struct p101_env *env, const char *line)
 {
     (void)env;

@@ -179,6 +179,13 @@ static int compare_ranks(const void *left, const void *right)
     return result;
 }
 
+#ifdef P101_TRACE_TESTING
+int p101_trace_test_compare_ranks(const struct site_rank *left, const struct site_rank *right)
+{
+    return compare_ranks(left, right);
+}
+#endif
+
 void p101_trace_report_health(const struct p101_env *env, struct p101_error *err, const struct model *model)
 {
     if(model->malformed == 0 && model->bad_version == 0 && p101_tool_event_stream_health_is_complete(&model->stream_health))

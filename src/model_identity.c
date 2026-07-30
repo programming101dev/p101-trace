@@ -4,7 +4,11 @@
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <p101_posix/p101_string.h>
+#include <stdbool.h>
 #include <stdint.h>
+
+static bool reserve_sites(const struct p101_env *env, struct p101_error *err, struct model *model);
+static bool reserve_procs(const struct p101_env *env, struct p101_error *err, struct model *model);
 
 size_t p101_trace_intern_site(const struct p101_env *env, struct p101_error *err, struct model *model, const struct call_event *event)
 {
@@ -25,33 +29,9 @@ size_t p101_trace_intern_site(const struct p101_env *env, struct p101_error *err
         }
     }
 
-    if(model->site_count == model->site_capacity)
+    if(!reserve_sites(env, err, model))
     {
-        size_t            capacity;
-        struct call_site *grown;
-
-        if(model->site_capacity > SIZE_MAX / 2U)
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        capacity = (model->site_capacity == 0) ? SITE_FIRST_CAPACITY : model->site_capacity * 2U;
-        if(capacity > SIZE_MAX / sizeof(struct call_site))
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        grown = (struct call_site *)p101_realloc(env, err, model->sites, capacity * sizeof(struct call_site));
-
-        if(grown == NULL)
-        {
-            goto done;
-        }
-
-        model->sites         = grown;
-        model->site_capacity = capacity;
+        goto done;
     }
 
     {
@@ -105,34 +85,9 @@ struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_
         }
     }
 
-    if(model->proc_count == model->proc_capacity)
+    if(!reserve_procs(env, err, model))
     {
-        size_t             capacity;
-        struct proc_state *grown;
-
-        if(model->proc_capacity > SIZE_MAX / 2U)
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        capacity = (model->proc_capacity == 0) ? PROC_FIRST_CAPACITY : model->proc_capacity * 2U;
-        if(capacity > SIZE_MAX / sizeof(struct proc_state))
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        grown = (struct proc_state *)p101_realloc(env, err, model->procs, capacity * sizeof(struct proc_state));
-
-        if(grown == NULL)
-        {
-            goto done;
-        }
-
-        p101_memset(env, &grown[model->proc_capacity], 0, (capacity - model->proc_capacity) * sizeof(struct proc_state));
-        model->procs         = grown;
-        model->proc_capacity = capacity;
+        goto done;
     }
 
     proc = &model->procs[model->proc_count];
@@ -144,3 +99,86 @@ struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_
 done:
     return proc;
 }
+
+static bool reserve_sites(const struct p101_env *env, struct p101_error *err, struct model *model)
+{
+    size_t            capacity;
+    struct call_site *grown;
+
+    if(model->site_count < model->site_capacity)
+    {
+        return true;
+    }
+    if(model->site_count > model->site_capacity)
+    {
+        P101_ERROR_RAISE_ERRNO(err, EINVAL);
+        return false;
+    }
+    if(model->site_capacity > SIZE_MAX / 2U)
+    {
+        P101_ERROR_RAISE_ERRNO(err, ENOMEM);
+        return false;
+    }
+    capacity = (model->site_capacity == 0U) ? SITE_FIRST_CAPACITY : model->site_capacity * 2U;
+    if(capacity > SIZE_MAX / sizeof(*grown))
+    {
+        P101_ERROR_RAISE_ERRNO(err, ENOMEM);
+        return false;
+    }
+    grown = (struct call_site *)p101_realloc(env, err, model->sites, capacity * sizeof(*grown));
+    if(grown == NULL)
+    {
+        return false;
+    }
+    model->sites         = grown;
+    model->site_capacity = capacity;
+    return true;
+}
+
+static bool reserve_procs(const struct p101_env *env, struct p101_error *err, struct model *model)
+{
+    size_t             capacity;
+    struct proc_state *grown;
+
+    if(model->proc_count < model->proc_capacity)
+    {
+        return true;
+    }
+    if(model->proc_count > model->proc_capacity)
+    {
+        P101_ERROR_RAISE_ERRNO(err, EINVAL);
+        return false;
+    }
+    if(model->proc_capacity > SIZE_MAX / 2U)
+    {
+        P101_ERROR_RAISE_ERRNO(err, ENOMEM);
+        return false;
+    }
+    capacity = (model->proc_capacity == 0U) ? PROC_FIRST_CAPACITY : model->proc_capacity * 2U;
+    if(capacity > SIZE_MAX / sizeof(*grown))
+    {
+        P101_ERROR_RAISE_ERRNO(err, ENOMEM);
+        return false;
+    }
+    grown = (struct proc_state *)p101_realloc(env, err, model->procs, capacity * sizeof(*grown));
+    if(grown == NULL)
+    {
+        return false;
+    }
+    p101_memset(env, &grown[model->proc_capacity], 0, (capacity - model->proc_capacity) * sizeof(*grown));
+    model->procs         = grown;
+    model->proc_capacity = capacity;
+    return true;
+}
+
+#ifdef P101_TRACE_TESTING
+bool p101_trace_test_reserve_sites(const struct p101_env *env, struct p101_error *err, struct model *model)
+{
+    return reserve_sites(env, err, model);
+}
+
+bool p101_trace_test_reserve_procs(const struct p101_env *env, struct p101_error *err, struct model *model)
+{
+    return reserve_procs(env, err, model);
+}
+#endif

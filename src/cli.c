@@ -2,6 +2,7 @@
 #include "constants.h"
 #include "errors.h"
 #include <errno.h>
+#include <limits.h>
 #include <p101_c/p101_ctype.h>
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_stdlib.h>
@@ -9,6 +10,8 @@
 #include <p101_posix/p101_unistd.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+static void handle_option(const struct p101_env *env, struct p101_error *err, struct arguments *args, int option, const char *option_argument, int option_character, const char *program_name);
 
 void p101_trace_arguments_init(const struct p101_env *env, struct arguments *args)
 {
@@ -31,88 +34,7 @@ void p101_trace_parse_arguments(const struct p101_env *env, struct p101_error *e
 
     while((opt = p101_getopt(env, argc, argv, ":hvfsl:")) != -1 && p101_error_has_no_error(err))
     {
-        switch(opt)
-        {
-            case 'h':
-            {
-                p101_trace_usage(env, err, argv[0], EXIT_CLEAN, NULL);
-            }
-            case 'v':
-            {
-                args->verbose = true;
-                break;
-            }
-            case 'f':
-            {
-                if(args->mode != TRACE_MODE_TREE)
-                {
-                    P101_ERROR_RAISE_USER(err, "Choose only one report mode.", ERR_USAGE);
-                    break;
-                }
-
-                args->mode = TRACE_MODE_FLAT;
-                break;
-            }
-            case 's':
-            {
-                if(args->mode != TRACE_MODE_TREE)
-                {
-                    P101_ERROR_RAISE_USER(err, "Choose only one report mode.", ERR_USAGE);
-                    break;
-                }
-
-                args->mode = TRACE_MODE_SUMMARY;
-                break;
-            }
-            case 'l':
-            {
-                char              *end;
-                unsigned long long value;
-
-                errno = 0;
-                end   = NULL;
-                value = p101_strtoull(env, err, optarg, &end, DECIMAL_RADIX);
-                if(p101_error_has_error(err) || errno != 0 || end == optarg || *end != '\0' || value > SIZE_MAX)
-                {
-                    P101_ERROR_RAISE_USER(err, "The slow-call threshold must be a non-negative integer number of nanoseconds.", ERR_USAGE);
-                    break;
-                }
-                args->slow_threshold_ns = (size_t)value;
-                break;
-            }
-            case ':':
-            {
-                char msg[MSG_LEN];
-
-                p101_snprintf(env, err, msg, sizeof(msg), "Option '-%c' requires an argument.", optopt ? optopt : '?');
-                P101_ERROR_RAISE_USER(err, msg, ERR_USAGE);
-                break;
-            }
-            case '?':
-            {
-                char msg[MSG_LEN];
-
-                if(p101_isprint(env, optopt))
-                {
-                    p101_snprintf(env, err, msg, sizeof(msg), "Unknown option '-%c'.", optopt);
-                }
-                else
-                {
-                    p101_snprintf(env, err, msg, sizeof(msg), "Unknown option character 0x%02X.", (unsigned)(unsigned char)optopt);
-                }
-
-                P101_ERROR_RAISE_USER(err, msg, ERR_USAGE);
-                break;
-            }
-            default:
-            {
-                char msg[MSG_LEN];
-
-                p101_snprintf(env, err, msg, sizeof(msg), "Internal error: unhandled option '-%c' returned by getopt.", p101_isprint(env, opt) ? opt : '?');
-                P101_ERROR_RAISE_USER(err, msg, ERR_USAGE);
-                break;
-            }
-        }
+        handle_option(env, err, args, opt, optarg, optopt, argv[0]);
     }
 
     if(p101_error_has_no_error(err))
@@ -129,6 +51,108 @@ void p101_trace_parse_arguments(const struct p101_env *env, struct p101_error *e
         }
     }
 }
+
+static void handle_option(const struct p101_env *env, struct p101_error *err, struct arguments *args, int option, const char *option_argument, int option_character, const char *program_name)
+{
+    switch(option)
+    {
+        case 'h':
+        {
+            p101_trace_usage(env, err, program_name, EXIT_CLEAN, NULL);
+        }
+        case 'v':
+        {
+            args->verbose = true;
+            break;
+        }
+        case 'f':
+        {
+            if(args->mode != TRACE_MODE_TREE)
+            {
+                P101_ERROR_RAISE_USER(err, "Choose only one report mode.", ERR_USAGE);
+                break;
+            }
+            args->mode = TRACE_MODE_FLAT;
+            break;
+        }
+        case 's':
+        {
+            if(args->mode != TRACE_MODE_TREE)
+            {
+                P101_ERROR_RAISE_USER(err, "Choose only one report mode.", ERR_USAGE);
+                break;
+            }
+            args->mode = TRACE_MODE_SUMMARY;
+            break;
+        }
+        case 'l':
+        {
+            char              *end;
+            unsigned long long value;
+
+            if(option_argument[0] == '\0' || option_argument[0] == '-')
+            {
+                P101_ERROR_RAISE_USER(err, "The slow-call threshold must be a non-negative integer number of nanoseconds.", ERR_USAGE);
+                break;
+            }
+            errno = 0;
+            end   = NULL;
+            value = p101_strtoull(env, err, option_argument, &end, DECIMAL_RADIX);
+            if(p101_error_has_error(err) || *end != '\0')
+            {
+                P101_ERROR_RAISE_USER(err, "The slow-call threshold must be a non-negative integer number of nanoseconds.", ERR_USAGE);
+                break;
+            }
+#if SIZE_MAX < ULLONG_MAX
+            if(value > SIZE_MAX)
+            {
+                P101_ERROR_RAISE_USER(err, "The slow-call threshold is too large for this platform.", ERR_USAGE);
+                break;
+            }
+#endif
+            args->slow_threshold_ns = (size_t)value;
+            break;
+        }
+        case ':':
+        {
+            char msg[MSG_LEN];
+
+            p101_snprintf(env, err, msg, sizeof(msg), "Option '-%c' requires an argument.", option_character);
+            P101_ERROR_RAISE_USER(err, msg, ERR_USAGE);
+            break;
+        }
+        case '?':
+        {
+            char msg[MSG_LEN];
+
+            if(p101_isprint(env, option_character))
+            {
+                p101_snprintf(env, err, msg, sizeof(msg), "Unknown option '-%c'.", option_character);
+            }
+            else
+            {
+                p101_snprintf(env, err, msg, sizeof(msg), "Unknown option character 0x%02X.", (unsigned)(unsigned char)option_character);
+            }
+            P101_ERROR_RAISE_USER(err, msg, ERR_USAGE);
+            break;
+        }
+        default:
+        {
+            char msg[MSG_LEN];
+
+            p101_snprintf(env, err, msg, sizeof(msg), "Internal error: unhandled option value %d returned by getopt.", option);
+            P101_ERROR_RAISE_USER(err, msg, ERR_USAGE);
+            break;
+        }
+    }
+}
+
+#ifdef P101_TRACE_TESTING
+void p101_trace_test_handle_option(const struct p101_env *env, struct p101_error *err, struct arguments *args, int option, const char *option_argument)
+{
+    handle_option(env, err, args, option, option_argument, option, "p101-trace-test");
+}
+#endif
 
 void p101_trace_check_arguments(const struct p101_env *env, struct p101_error *err, const struct arguments *args)
 {

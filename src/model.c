@@ -101,10 +101,11 @@ done:
     return;
 }
 
-void p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err, struct model *model, const struct call_event *event)
+struct proc_state *p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err, struct model *model, const struct call_event *event)
 {
     struct proc_state *proc;
 
+    proc = NULL;
     if(model == NULL || event == NULL)
     {
         goto done;
@@ -203,7 +204,7 @@ void p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err,
     }
 
 done:
-    return;
+    return proc;
 }
 
 static bool event_matches_site(const struct p101_env *env, const struct call_event *event, const struct call_site *site)
@@ -218,7 +219,7 @@ static bool event_matches_site(const struct p101_env *env, const struct call_eve
 static void count_exit_result(const struct p101_env *env, struct call_site *site, const struct call_event *event)
 {
     site->exits++;
-    if(p101_strcmp(env, event->result, "-") != 0)
+    if(event->result != NULL && p101_strcmp(env, event->result, "-") != 0)
     {
         site->exits_with_result++;
         if(result_looks_like_failure(env, event->result))
@@ -264,16 +265,9 @@ static bool result_looks_like_failure(const struct p101_env *env, const char *re
 
     ret_val = false;
 
-    if(result == NULL || p101_strcmp(env, result, "-") == 0)
-    {
-        goto done;
-    }
-
     if(p101_strcmp(env, result, "NULL") == 0 || p101_strcmp(env, result, "null") == 0 || p101_strcmp(env, result, "false") == 0 || p101_strcmp(env, result, "EOF") == 0 || result[0] == '-')
     {
         ret_val = true;
     }
-
-done:
     return ret_val;
 }

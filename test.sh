@@ -118,3 +118,9 @@ if [ "$coverage" -eq 1 ]; then
 fi
 echo ">> building tests"; cmake --build "$test_bd"
 echo ">> ctest"; ( cd "$test_bd" && ctest --output-on-failure ${ctest_args[@]+"${ctest_args[@]}"} )
+if [ "$coverage" -eq 1 ]; then
+  command -v gcovr >/dev/null 2>&1 || { echo "gcovr is required for the coverage gate." >&2; exit 1; }
+  gcov_tool=gcov
+  case "$ccbase" in clang*) gcov_tool="llvm-cov gcov" ;; gcc-*) gcov_tool="gcov-${ccbase#gcc-}" ;; esac
+  gcovr --gcov-executable "$gcov_tool" -r . "$test_bd" --fail-under-line 100 --fail-under-branch 100 --print-summary
+fi

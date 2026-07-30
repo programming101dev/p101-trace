@@ -27,14 +27,14 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
     ret_val = EXIT_TROUBLE;
     stream  = p101_trace_open_log(env, err, args->log_name, &owned);
 
-    if(stream == NULL || p101_error_has_error(err))
+    if(stream == NULL)
     {
         goto done;
     }
 
     model = p101_trace_model_create(env, err);
 
-    if(model == NULL || p101_error_has_error(err))
+    if(model == NULL)
     {
         goto done;
     }
@@ -78,6 +78,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
         if(status == LINE_OK)
         {
             struct p101_tool_event_record observed;
+            struct proc_state            *proc;
 
             p101_memset(env, &observed, 0, sizeof(observed));
             observed.version     = event.version;
@@ -92,18 +93,15 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
                 p101_trace_model_fork(env, err, model, &event);
                 continue;
             }
-            p101_trace_model_ingest(env, err, model, &event);
+            proc = p101_trace_model_ingest(env, err, model, &event);
+            if(p101_error_has_error(err))
+            {
+                goto done;
+            }
 
             if(args->mode == TRACE_MODE_TREE)
             {
-                const struct proc_state *proc;
-
-                proc = p101_trace_find_proc(env, err, model, event.pid, event.context_id);
-
-                if(proc != NULL)
-                {
-                    p101_trace_print_tree_event(env, err, &event, proc);
-                }
+                p101_trace_print_tree_event(env, err, &event, proc);
             }
             else if(args->mode == TRACE_MODE_FLAT)
             {
@@ -157,7 +155,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
     }
 
 done:
-    if(owned && stream != NULL)
+    if(owned)
     {
         p101_fclose(env, err, stream);
     }

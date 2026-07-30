@@ -51,3 +51,19 @@ function(p101_add_test name)
 endfunction()
 
 p101_add_test(test_arguments test_arguments.c ../src/cli.c ../src/model.c ../src/model_identity.c ../src/model_lifecycle.c ../src/parse.c ../src/report.c ../src/runner.c)
+target_compile_definitions(test_arguments PRIVATE P101_TRACE_TESTING=1)
+
+add_executable(p101_trace_coverage_cli
+    ../src/main.c
+    ../src/cli.c
+    ../src/model.c
+    ../src/model_identity.c
+    ../src/model_lifecycle.c
+    ../src/parse.c
+    ../src/report.c
+    ../src/runner.c)
+target_include_directories(p101_trace_coverage_cli PRIVATE ${_P101_INC_DIRS} "${CMAKE_CURRENT_SOURCE_DIR}/../include")
+target_link_libraries(p101_trace_coverage_cli PRIVATE ${_P101_RESOLVED} m)
+target_compile_options(p101_trace_coverage_cli PRIVATE ${_COV})
+target_link_options(p101_trace_coverage_cli PRIVATE ${_COV})
+add_test(NAME test_cli COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/test_cli.sh" "$<TARGET_FILE:p101_trace_coverage_cli>")
