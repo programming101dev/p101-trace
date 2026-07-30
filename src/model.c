@@ -1,5 +1,6 @@
 #include "model.h"
 #include "constants.h"
+#include "model_identity.h"
 #include <errno.h>
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
@@ -9,10 +10,13 @@
 #include <stdlib.h>
 
 static bool result_looks_like_failure(const struct p101_env *env, const char *result);
+static bool reserve_active_call(const struct p101_env *env, struct p101_error *err, struct proc_state *proc);
+static bool event_matches_site(const struct p101_env *env, const struct call_event *event, const struct call_site *site);
+static void count_exit_result(const struct p101_env *env, struct call_site *site, const struct call_event *event);
 
 struct model *p101_trace_model_create(const struct p101_env *env, struct p101_error *err)
 {
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     return (struct model *)p101_calloc(env, err, 1, sizeof(struct model));
 }
 
@@ -20,7 +24,7 @@ void p101_trace_model_destroy(const struct p101_env *env, struct model **model)
 {
     struct model *victim;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
 
     if(model == NULL || *model == NULL)
     {
@@ -37,7 +41,12 @@ void p101_trace_model_destroy(const struct p101_env *env, struct model **model)
     }
 
     p101_free(env, victim->sites);
+    for(size_t i = 0U; i < victim->proc_count; i++)
+    {
+        p101_free(env, victim->procs[i].active_calls);
+    }
     p101_free(env, victim->procs);
+    p101_tool_event_stream_health_destroy(&victim->stream_health);
     p101_free(env, victim);
     *model = NULL;
 
@@ -64,6 +73,7 @@ void p101_trace_model_count_line(struct model *model, enum line_status status)
             break;
         }
         case LINE_OK:
+        case LINE_COMPLETE:
         {
             break;
         }
@@ -93,18 +103,9 @@ done:
 
 void p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err, struct model *model, const struct call_event *event)
 {
-    size_t             site_index;
-    struct call_site  *site;
     struct proc_state *proc;
 
     if(model == NULL || event == NULL)
-    {
-        goto done;
-    }
-
-    site_index = p101_trace_intern_site(env, err, model, event);
-
-    if(p101_error_has_error(err))
     {
         goto done;
     }
@@ -117,10 +118,25 @@ void p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err,
     }
 
     model->records++;
-    site = &model->sites[site_index];
 
     if(event->kind == CALL_EVENT_ENTER)
     {
+        size_t            site_index;
+        struct call_site *site;
+
+        site_index = p101_trace_intern_site(env, err, model, event);
+        if(p101_error_has_error(err))
+        {
+            goto done;
+        }
+        site = &model->sites[site_index];
+        if(!reserve_active_call(env, err, proc))
+        {
+            goto done;
+        }
+        proc->active_calls[proc->depth].site                   = site_index;
+        proc->active_calls[proc->depth].monotonic_ns           = event->monotonic_ns;
+        proc->active_calls[proc->depth].monotonic_ns_available = event->monotonic_ns_available;
         site->enters++;
         proc->depth++;
 
@@ -131,24 +147,57 @@ void p101_trace_model_ingest(const struct p101_env *env, struct p101_error *err,
     }
     else
     {
-        site->exits++;
-
-        if(p101_strcmp(env, event->result, "-") != 0)
-        {
-            site->exits_with_result++;
-
-            if(result_looks_like_failure(env, event->result))
-            {
-                site->likely_failures++;
-            }
-        }
-
         if(proc->depth == 0)
         {
+            size_t site_index;
+
+            site_index = p101_trace_intern_site(env, err, model, event);
+            if(p101_error_has_error(err))
+            {
+                goto done;
+            }
+            count_exit_result(env, &model->sites[site_index], event);
             proc->unmatched_exits++;
         }
         else
         {
+            const struct active_call *active;
+            struct call_site         *site;
+
+            active = &proc->active_calls[proc->depth - 1U];
+            site   = &model->sites[active->site];
+            if(!event_matches_site(env, event, site))
+            {
+                size_t exit_site;
+
+                exit_site = p101_trace_intern_site(env, err, model, event);
+                if(p101_error_has_no_error(err))
+                {
+                    count_exit_result(env, &model->sites[exit_site], event);
+                }
+                proc->mismatched_exits++;
+                goto done;
+            }
+            count_exit_result(env, site, event);
+            if(active->monotonic_ns_available != 0 && event->monotonic_ns_available != 0 && event->monotonic_ns >= active->monotonic_ns)
+            {
+                size_t duration;
+
+                duration = event->monotonic_ns - active->monotonic_ns;
+                model->sites[active->site].timed_calls++;
+                if(model->sites[active->site].total_duration_ns <= SIZE_MAX - duration)
+                {
+                    model->sites[active->site].total_duration_ns += duration;
+                }
+                else
+                {
+                    model->sites[active->site].total_duration_ns = SIZE_MAX;
+                }
+                if(duration > model->sites[active->site].max_duration_ns)
+                {
+                    model->sites[active->site].max_duration_ns = duration;
+                }
+            }
             proc->depth--;
         }
     }
@@ -157,85 +206,56 @@ done:
     return;
 }
 
-size_t p101_trace_intern_site(const struct p101_env *env, struct p101_error *err, struct model *model, const struct call_event *event)
+static bool event_matches_site(const struct p101_env *env, const struct call_event *event, const struct call_site *site)
 {
-    size_t index;
-
-    index = model->site_count;
-
-    for(size_t i = 0; i < model->site_count; i++)
+    if(p101_strcmp(env, event->call_name, site->call_name) != 0 || p101_strcmp(env, event->function_name, site->function_name) != 0 || p101_strcmp(env, event->file_name, site->file_name) != 0)
     {
-        const struct call_site *site;
+        return false;
+    }
+    return true;
+}
 
-        site = &model->sites[i];
-
-        if(site->line_number == event->line_number && p101_strcmp(env, site->call_name, event->call_name) == 0 && p101_strcmp(env, site->file_name, event->file_name) == 0 && p101_strcmp(env, site->function_name, event->function_name) == 0)
+static void count_exit_result(const struct p101_env *env, struct call_site *site, const struct call_event *event)
+{
+    site->exits++;
+    if(p101_strcmp(env, event->result, "-") != 0)
+    {
+        site->exits_with_result++;
+        if(result_looks_like_failure(env, event->result))
         {
-            index = i;
-            goto done;
+            site->likely_failures++;
         }
     }
+}
 
-    if(model->site_count == model->site_capacity)
+static bool reserve_active_call(const struct p101_env *env, struct p101_error *err, struct proc_state *proc)
+{
+    struct active_call *grown;
+    size_t              capacity;
+
+    if(proc->depth < proc->active_capacity)
     {
-        size_t            capacity;
-        struct call_site *grown;
-
-        if(model->site_capacity > SIZE_MAX / 2U)
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        capacity = (model->site_capacity == 0) ? SITE_FIRST_CAPACITY : model->site_capacity * 2U;
-        if(capacity > SIZE_MAX / sizeof(struct call_site))
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        grown = (struct call_site *)p101_realloc(env, err, model->sites, capacity * sizeof(struct call_site));
-
-        if(grown == NULL)
-        {
-            goto done;
-        }
-
-        model->sites         = grown;
-        model->site_capacity = capacity;
+        return true;
     }
-
+    if(proc->active_capacity > SIZE_MAX / 2U)
     {
-        char *call_name;
-        char *file_name;
-        char *function_name;
-
-        call_name     = p101_strdup(env, err, event->call_name);
-        file_name     = p101_strdup(env, err, event->file_name);
-        function_name = p101_strdup(env, err, event->function_name);
-
-        if(call_name == NULL || file_name == NULL || function_name == NULL)
-        {
-            p101_free(env, call_name);
-            p101_free(env, file_name);
-            p101_free(env, function_name);
-            goto done;
-        }
-
-        model->sites[index].call_name         = call_name;
-        model->sites[index].file_name         = file_name;
-        model->sites[index].function_name     = function_name;
-        model->sites[index].line_number       = event->line_number;
-        model->sites[index].enters            = 0;
-        model->sites[index].exits             = 0;
-        model->sites[index].exits_with_result = 0;
-        model->sites[index].likely_failures   = 0;
+        P101_ERROR_RAISE_ERRNO(err, ENOMEM);
+        return false;
     }
-
-    model->site_count++;
-
-done:
-    return index;
+    capacity = proc->active_capacity == 0U ? ACTIVE_FIRST_CAPACITY : proc->active_capacity * 2U;
+    if(capacity > SIZE_MAX / sizeof(*grown))
+    {
+        P101_ERROR_RAISE_ERRNO(err, ENOMEM);
+        return false;
+    }
+    grown = (struct active_call *)p101_realloc(env, err, proc->active_calls, capacity * sizeof(*grown));
+    if(grown == NULL)
+    {
+        return false;
+    }
+    proc->active_calls    = grown;
+    proc->active_capacity = capacity;
+    return true;
 }
 
 static bool result_looks_like_failure(const struct p101_env *env, const char *result)
@@ -256,59 +276,4 @@ static bool result_looks_like_failure(const struct p101_env *env, const char *re
 
 done:
     return ret_val;
-}
-
-struct proc_state *p101_trace_find_proc(const struct p101_env *env, struct p101_error *err, struct model *model, long pid, size_t context_id)
-{
-    struct proc_state *proc;
-
-    proc = NULL;
-
-    for(size_t i = 0; i < model->proc_count; i++)
-    {
-        if(model->procs[i].pid == pid && model->procs[i].context_id == context_id)
-        {
-            proc = &model->procs[i];
-            goto done;
-        }
-    }
-
-    if(model->proc_count == model->proc_capacity)
-    {
-        size_t             capacity;
-        struct proc_state *grown;
-
-        if(model->proc_capacity > SIZE_MAX / 2U)
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        capacity = (model->proc_capacity == 0) ? PROC_FIRST_CAPACITY : model->proc_capacity * 2U;
-        if(capacity > SIZE_MAX / sizeof(struct proc_state))
-        {
-            P101_ERROR_RAISE_ERRNO(err, ENOMEM);
-            goto done;
-        }
-
-        grown = (struct proc_state *)p101_realloc(env, err, model->procs, capacity * sizeof(struct proc_state));
-
-        if(grown == NULL)
-        {
-            goto done;
-        }
-
-        p101_memset(env, &grown[model->proc_capacity], 0, (capacity - model->proc_capacity) * sizeof(struct proc_state));
-        model->procs         = grown;
-        model->proc_capacity = capacity;
-    }
-
-    proc = &model->procs[model->proc_count];
-    p101_memset(env, proc, 0, sizeof(*proc));
-    proc->pid        = pid;
-    proc->context_id = context_id;
-    model->proc_count++;
-
-done:
-    return proc;
 }

@@ -1,6 +1,8 @@
 #include "runner.h"
 #include "constants.h"
 #include "model.h"
+#include "model_identity.h"
+#include "model_lifecycle.h"
 #include "parse.h"
 #include "report.h"
 #include <p101_c/p101_stdio.h>
@@ -18,7 +20,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
     int           owned;
     int           ret_val;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     model   = NULL;
     stream  = NULL;
     owned   = 0;
@@ -75,7 +77,21 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
 
         if(status == LINE_OK)
         {
+            struct p101_tool_event_record observed;
+
+            p101_memset(env, &observed, 0, sizeof(observed));
+            observed.version     = event.version;
+            observed.record_kind = event.kind == CALL_EVENT_FORK ? P101_TOOL_EVENT_RECORD_FORK : P101_TOOL_EVENT_RECORD_CALL;
+            observed.pid         = event.pid;
+            observed.context_id  = event.context_id;
+            observed.sequence    = event.event_sequence;
+            (void)p101_tool_event_stream_health_observe(&model->stream_health, &observed);
             event.sequence = model->records + 1U;
+            if(event.kind == CALL_EVENT_FORK)
+            {
+                p101_trace_model_fork(env, err, model, &event);
+                continue;
+            }
             p101_trace_model_ingest(env, err, model, &event);
 
             if(args->mode == TRACE_MODE_TREE)
@@ -94,6 +110,22 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
                 p101_trace_print_flat_event(env, err, &event);
             }
         }
+        else if(status == LINE_COMPLETE)
+        {
+            struct p101_tool_event_record completion;
+
+            p101_memset(env, &completion, 0, sizeof(completion));
+            completion.version          = event.version;
+            completion.record_kind      = P101_TOOL_EVENT_RECORD_COMPLETE;
+            completion.pid              = event.pid;
+            completion.context_id       = event.context_id;
+            completion.sequence         = event.event_sequence;
+            completion.events_attempted = event.events_attempted;
+            completion.write_failed     = event.write_failed;
+            completion.write_errno      = event.write_errno;
+            (void)p101_tool_event_stream_health_observe(&model->stream_health, &completion);
+            p101_trace_model_complete(env, err, model, event.pid, event.context_id);
+        }
     }
 
     if(p101_error_has_error(err))
@@ -104,10 +136,25 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
     if(args->mode == TRACE_MODE_SUMMARY)
     {
         p101_trace_report_summary(env, err, model);
+        p101_trace_report_slow_calls(env, err, model, args->slow_threshold_ns);
     }
 
     p101_trace_report_health(env, err, model);
-    ret_val = (model->malformed == 0 && model->bad_version == 0) ? EXIT_CLEAN : EXIT_FINDINGS;
+    if(model->malformed != 0U || model->bad_version != 0U || !p101_tool_event_stream_health_is_complete(&model->stream_health))
+    {
+        ret_val = EXIT_TROUBLE;
+    }
+    else
+    {
+        if(p101_trace_model_has_stack_errors(model))
+        {
+            ret_val = EXIT_FINDINGS;
+        }
+        else
+        {
+            ret_val = EXIT_CLEAN;
+        }
+    }
 
 done:
     if(owned && stream != NULL)
@@ -124,7 +171,7 @@ FILE *p101_trace_open_log(const struct p101_env *env, struct p101_error *err, co
 {
     FILE *stream;
 
-    P101_TRACE(env);
+    P101_TRACE_SCOPE(env);
     *owned = 0;
 
     if(path == NULL || p101_strcmp(env, path, "-") == 0)

@@ -33,6 +33,8 @@ set(main_SOURCES
         src/cli.c
         src/main.c
         src/model.c
+        src/model_identity.c
+        src/model_lifecycle.c
         src/parse.c
         src/report.c
         src/runner.c
@@ -45,6 +47,9 @@ set(main_HEADERS
         include/event.h
         include/errors.h
         include/model.h
+        include/model_identity.h
+        include/model_lifecycle.h
+        include/model_types.h
         include/parse.h
         include/report.h
         include/runner.h

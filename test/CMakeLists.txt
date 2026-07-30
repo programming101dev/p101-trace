@@ -50,4 +50,4 @@ function(p101_add_test name)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
-p101_add_test(test_arguments test_arguments.c ../src/cli.c ../src/model.c ../src/parse.c ../src/report.c ../src/runner.c)
+p101_add_test(test_arguments test_arguments.c ../src/cli.c ../src/model.c ../src/model_identity.c ../src/model_lifecycle.c ../src/parse.c ../src/report.c ../src/runner.c)

@@ -7,6 +7,8 @@ enum
     MSG_LEN             = 256,
     SITE_FIRST_CAPACITY = 32,
     PROC_FIRST_CAPACITY = 4,
+    ACTIVE_FIRST_CAPACITY = 16,
+    DECIMAL_RADIX       = 10,
     EXIT_CLEAN          = 0,
     EXIT_FINDINGS       = 1,
     EXIT_TROUBLE        = 2

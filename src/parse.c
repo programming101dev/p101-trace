@@ -2,8 +2,6 @@
 #include <p101_c/p101_string.h>
 #include <p101_tool_event/event.h>
 
-static const char CALL_PREFIX[] = "P101CALL\t";
-
 static enum line_status map_parse_status(p101_tool_event_parse_status status);
 static enum line_status unknown_parse_status(void);
 
@@ -25,6 +23,26 @@ enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *li
 
     if(status != LINE_OK)
     {
+        goto done;
+    }
+
+    event->version        = record.version;
+    event->pid            = record.pid;
+    event->context_id     = record.context_id;
+    event->event_sequence = record.sequence;
+    if(record.record_kind == P101_TOOL_EVENT_RECORD_COMPLETE)
+    {
+        event->write_failed     = record.write_failed;
+        event->write_errno      = record.write_errno;
+        event->events_attempted = record.events_attempted;
+        status                  = LINE_COMPLETE;
+        goto done;
+    }
+    if(record.record_kind == P101_TOOL_EVENT_RECORD_FORK)
+    {
+        event->kind      = CALL_EVENT_FORK;
+        event->child_pid = record.child_pid;
+        status           = LINE_OK;
         goto done;
     }
 
@@ -103,5 +121,6 @@ static enum line_status unknown_parse_status(void)
 
 bool p101_trace_call_line_is_ours(const struct p101_env *env, const char *line)
 {
-    return (p101_strncmp(env, line, CALL_PREFIX, sizeof(CALL_PREFIX) - 1U) == 0) != 0;
+    (void)env;
+    return p101_tool_event_line_is_ours(line) != 0;
 }

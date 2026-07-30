@@ -7,8 +7,9 @@ p101-traced call your code elects to record, plus any student function that uses
 the same tracing rules.
 
 The default view is an indented call tree. `-s` prints aggregate counts by call
-site, including result-bearing exits and failure-looking return values, and `-f`
-prints normalized flat records that are easier for scripts to consume.
+site, including result-bearing exits, failure-looking return values, measured
+call durations, and an optional slow-call section. `-f` prints normalized flat
+records that are easier for scripts to consume.
 
 ## Producing a call log
 
@@ -32,9 +33,11 @@ Use `-` as `P101_CALL_LOG` to write the call stream to stderr.
 
 One record per line, tab separated:
 
-    P101CALL <TAB> 2 <TAB> pid <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> ENTER|EXIT <TAB> line <TAB> function <TAB> call <TAB> args <TAB> result <TAB> file
+    P101CALL <TAB> 4 <TAB> pid <TAB> context <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> ENTER|EXIT <TAB> line <TAB> function <TAB> call <TAB> args <TAB> result <TAB> file
+    P101COMPLETE <TAB> 4 <TAB> pid <TAB> context <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> events-attempted <TAB> write-failed <TAB> write-errno
 
-The `2` is the supported format version. `seq` is the per-env event sequence.
+Version 4 is the only supported format. Other versions are rejected. `seq` is
+the per-environment event sequence.
 `mono_ns` and `wall_unix_ns` are timestamps, or `-` when unavailable. `args` and
 `result` are `-` when not supplied.
 Tabs, newlines, carriage returns, and backslashes inside fields are escaped by
@@ -42,23 +45,42 @@ Tabs, newlines, carriage returns, and backslashes inside fields are escaped by
 `P101CALL` are skipped, which means a log stream can be shared with ordinary
 program output.
 
+An orderly producer writes `P101COMPLETE` when its environment is destroyed.
+A version 4 stream without that receipt, or whose receipt reports a write
+failure, is incomplete evidence and makes `p101-trace` return tool trouble. This
+distinguishes a truly clean trace from a program that crashed or a log that was
+truncated.
+
+Completion is also the terminal boundary for that process/context. Frames still
+open there are reported as `abandoned_at_completion` and then closed without an
+integrity finding; this is expected for `_Exit` and similar non-returning
+boundaries. An EXIT that mismatches the live stack before completion remains a
+finding. Use `P101_TRACE_SCOPE` for ordinary application functions so early
+returns still emit a matching EXIT.
+
+ENTER/EXIT pairs in the same process and context use their monotonic timestamps
+to compute call durations. Missing timestamps and unmatched records remain
+visible but are not assigned invented durations.
+
 `p101-trace` adds a derived event number to rendered output. It is the 1-based
 sequence of successfully parsed `P101CALL` records in that log file, useful for
 linking a trace line back to `p101-report` context.
 
 ## Options
 
-    p101-trace [-h] [-v] [-s|-f] [file]
+    p101-trace [-h] [-v] [-s|-f] [-l <nanoseconds>] [file]
 
 With no file, or with `-`, it reads standard input.
 
 - `-s` prints summary counts by source call site, with result/suspect columns.
 - `-f` prints one normalized tab-separated line per parsed event.
+- `-l` adds a slow-call section in summary mode for calls whose maximum
+  measured duration is at least the supplied threshold.
 - `-v` enables p101 tracing inside `p101-trace` itself.
 
-Exit status is `0` when the log parsed cleanly, `1` when malformed or
-unsupported-version `P101CALL` records were found, and `2` for bad usage or an
-I/O/tool failure.
+Exit status is `0` for a clean complete trace, `1` when ENTER/EXIT stack
+integrity findings were found, and `2` for malformed/unsupported input,
+incomplete evidence, bad usage, or an I/O/tool failure.
 
 ## Why this is useful
 

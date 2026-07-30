@@ -1,6 +1,8 @@
 #include "cli.h"
 #include "constants.h"
 #include "errors.h"
+#include "model.h"
+#include "model_lifecycle.h"
 #include "parse.h"
 #include "runner.h"
 #include "unity.h"
@@ -74,7 +76,7 @@ static void test_parse_rejects_competing_modes(void)
 
 static void test_parse_call_line_accepts_enter_record(void)
 {
-    char              line[] = "P101CALL\t3\t42\t7\t1\t100\t200\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
+    char              line[] = "P101CALL\t4\t42\t7\t1\t100\t200\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -92,7 +94,7 @@ static void test_parse_call_line_accepts_enter_record(void)
     TEST_ASSERT_EQUAL_STRING("server.c", event.file_name);
 }
 
-static void test_parse_call_line_accepts_v2_record(void)
+static void test_parse_call_line_rejects_old_record(void)
 {
     char              line[] = "P101CALL\t2\t42\t1\t100\t200\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
     struct call_event event;
@@ -100,17 +102,12 @@ static void test_parse_call_line_accepts_v2_record(void)
 
     status = p101_trace_parse_call_line(env, line, &event);
 
-    TEST_ASSERT_EQUAL_INT(LINE_OK, status);
-    TEST_ASSERT_EQUAL_INT64(42, event.pid);
-    TEST_ASSERT_EQUAL_INT(CALL_EVENT_EXIT, event.kind);
-    TEST_ASSERT_EQUAL_INT(17, event.line_number);
-    TEST_ASSERT_EQUAL_STRING("p101_open", event.call_name);
-    TEST_ASSERT_EQUAL_STRING("3", event.result);
+    TEST_ASSERT_EQUAL_INT(LINE_BAD_VERSION, status);
 }
 
 static void test_parse_call_line_rejects_bad_version(void)
 {
-    char              line[] = "P101CALL\t4\t42\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
+    char              line[] = "P101CALL\t5\t42\t1\t100\t200\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -121,7 +118,7 @@ static void test_parse_call_line_rejects_bad_version(void)
 
 static void test_parse_call_line_skips_other_records(void)
 {
-    char              line[] = "P101FD\t2\t42\t1\t100\t200\tOPEN\t3\t17\tmain\tserver.c\n";
+    char              line[] = "P101FD\t4\t42\t1\t1\t100\t200\tOPEN\t3\t17\tmain\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -132,13 +129,91 @@ static void test_parse_call_line_skips_other_records(void)
 
 static void test_parse_call_line_skips_generic_resource_records(void)
 {
-    char              line[] = "P101RESOURCE\t3\t42\t7\t1\t100\t200\tACQUIRE\tmapping\t0x1000\t-\t4096\tprivate\t17\tmain\tserver.c\n";
+    char              line[] = "P101RESOURCE\t4\t42\t7\t1\t100\t200\tACQUIRE\tmapping\t0x1000\t-\t4096\tprivate\t17\tmain\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
     status = p101_trace_parse_call_line(env, line, &event);
 
     TEST_ASSERT_EQUAL_INT(LINE_OTHER, status);
+}
+
+static void test_parse_completion_record(void)
+{
+    char              line[] = "P101COMPLETE\t4\t42\t7\t2\t160\t260\t1\t0\t0\n";
+    struct call_event event;
+
+    TEST_ASSERT_EQUAL_INT(LINE_COMPLETE, p101_trace_parse_call_line(env, line, &event));
+    TEST_ASSERT_EQUAL_INT(4, event.version);
+    TEST_ASSERT_EQUAL_INT(0, event.write_failed);
+}
+
+static void test_model_computes_call_duration(void)
+{
+    struct call_event enter;
+    struct call_event leave;
+    struct model     *model;
+
+    p101_memset(env, &enter, 0, sizeof(enter));
+    p101_memset(env, &leave, 0, sizeof(leave));
+    enter.pid                    = 42;
+    enter.context_id             = 7U;
+    enter.kind                   = CALL_EVENT_ENTER;
+    enter.monotonic_ns           = 100U;
+    enter.monotonic_ns_available = 1;
+    enter.line_number            = 17;
+    enter.function_name          = "main";
+    enter.call_name              = "p101_open";
+    enter.arguments              = "-";
+    enter.result                 = "-";
+    enter.file_name              = "server.c";
+    leave                        = enter;
+    leave.kind                   = CALL_EVENT_EXIT;
+    leave.monotonic_ns           = 160U;
+    leave.line_number            = 41;
+    leave.result                 = "3";
+
+    model = p101_trace_model_create(env, error);
+    TEST_ASSERT_NOT_NULL(model);
+    p101_trace_model_ingest(env, error, model, &enter);
+    p101_trace_model_ingest(env, error, model, &leave);
+
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+    TEST_ASSERT_EQUAL_UINT(1U, model->site_count);
+    TEST_ASSERT_EQUAL_UINT(1U, model->sites[0].exits);
+    TEST_ASSERT_EQUAL_UINT(1U, model->sites[0].timed_calls);
+    TEST_ASSERT_EQUAL_UINT(60U, model->sites[0].total_duration_ns);
+    TEST_ASSERT_EQUAL_UINT(60U, model->sites[0].max_duration_ns);
+    p101_trace_model_destroy(env, &model);
+}
+
+static void test_completion_closes_nonreturning_process_frames(void)
+{
+    struct call_event enter;
+    struct model     *model;
+
+    p101_memset(env, &enter, 0, sizeof(enter));
+    enter.pid           = 42;
+    enter.context_id    = 7U;
+    enter.kind          = CALL_EVENT_ENTER;
+    enter.line_number   = 17;
+    enter.function_name = "worker";
+    enter.call_name     = "worker";
+    enter.arguments     = "-";
+    enter.result        = "-";
+    enter.file_name     = "worker.c";
+
+    model = p101_trace_model_create(env, error);
+    TEST_ASSERT_NOT_NULL(model);
+    p101_trace_model_ingest(env, error, model, &enter);
+    p101_trace_model_complete(env, error, model, enter.pid, enter.context_id);
+
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+    TEST_ASSERT_EQUAL_UINT(1U, model->proc_count);
+    TEST_ASSERT_EQUAL_UINT(0U, model->procs[0].depth);
+    TEST_ASSERT_EQUAL_UINT(1U, model->procs[0].abandoned_at_completion);
+    TEST_ASSERT_FALSE(p101_trace_model_has_stack_errors(model));
+    p101_trace_model_destroy(env, &model);
 }
 
 static void write_temp_bytes(char *path, size_t path_size, const char *bytes, size_t byte_count)
@@ -180,7 +255,7 @@ static void test_runner_counts_embedded_nul_call_record_as_malformed(void)
     status = p101_trace_run(env, error, &args);
 
     TEST_ASSERT_FALSE(p101_error_has_error(error));
-    TEST_ASSERT_EQUAL_INT(EXIT_FINDINGS, status);
+    TEST_ASSERT_EQUAL_INT(EXIT_TROUBLE, status);
 
     p101_unlink(env, error, path);
 }
@@ -191,10 +266,13 @@ int main(void)
     RUN_TEST(test_parse_accepts_summary_mode_and_log_path);
     RUN_TEST(test_parse_rejects_competing_modes);
     RUN_TEST(test_parse_call_line_accepts_enter_record);
-    RUN_TEST(test_parse_call_line_accepts_v2_record);
+    RUN_TEST(test_parse_call_line_rejects_old_record);
     RUN_TEST(test_parse_call_line_rejects_bad_version);
     RUN_TEST(test_parse_call_line_skips_other_records);
     RUN_TEST(test_parse_call_line_skips_generic_resource_records);
+    RUN_TEST(test_parse_completion_record);
+    RUN_TEST(test_model_computes_call_duration);
+    RUN_TEST(test_completion_closes_nonreturning_process_frames);
     RUN_TEST(test_runner_counts_embedded_nul_call_record_as_malformed);
     return UNITY_END();
 }
