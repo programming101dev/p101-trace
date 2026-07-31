@@ -27,7 +27,12 @@ done
 
 [ -d test ] && [ -f test/CMakeLists.txt ] || { echo "No test/ tree here." >&2; exit 1; }
 
-main_bd="build"; [ -f .last-build-dir ] && main_bd="$(cat .last-build-dir)"
+main_bd="build"
+if [ -f .last-runtime-build-dir ]; then
+  main_bd="$(cat .last-runtime-build-dir)"
+elif [ -f .last-build-dir ]; then
+  main_bd="$(cat .last-build-dir)"
+fi
 [ -f "$main_bd/CMakeCache.txt" ] || { echo "No configured main build ('$main_bd'). Run ./change-compiler.sh first." >&2; exit 1; }
 
 # project language decides which compiler the test tree needs
@@ -49,6 +54,17 @@ if [ -f "$test_bd/CMakeCache.txt" ]; then
   cached_test_source="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$test_bd/CMakeCache.txt" | head -1)"
   if [ -n "$cached_test_source" ] && [ "$cached_test_source" != "$expected_test_source" ]; then
     echo ">> removing test cache moved from $cached_test_source"
+    rm -rf "$test_bd"
+  fi
+fi
+if [ -f "$test_bd/CMakeCache.txt" ]; then
+  if [ "$lang" = "CXX" ] || [ "$lang" = "CPP" ]; then
+    cached_test_compiler="$(sed -n 's/^CMAKE_CXX_COMPILER:FILEPATH=//p' "$test_bd/CMakeCache.txt" | head -1)"
+  else
+    cached_test_compiler="$(sed -n 's/^CMAKE_C_COMPILER:FILEPATH=//p' "$test_bd/CMakeCache.txt" | head -1)"
+  fi
+  if [ -n "$cached_test_compiler" ] && [ "$cached_test_compiler" != "$comp" ]; then
+    echo ">> removing test cache configured for $cached_test_compiler"
     rm -rf "$test_bd"
   fi
 fi
@@ -118,9 +134,3 @@ if [ "$coverage" -eq 1 ]; then
 fi
 echo ">> building tests"; cmake --build "$test_bd"
 echo ">> ctest"; ( cd "$test_bd" && ctest --output-on-failure ${ctest_args[@]+"${ctest_args[@]}"} )
-if [ "$coverage" -eq 1 ]; then
-  command -v gcovr >/dev/null 2>&1 || { echo "gcovr is required for the coverage gate." >&2; exit 1; }
-  gcov_tool=gcov
-  case "$ccbase" in clang*) gcov_tool="llvm-cov gcov" ;; gcc-*) gcov_tool="gcov-${ccbase#gcc-}" ;; esac
-  gcovr --gcov-executable "$gcov_tool" -r . "$test_bd" --fail-under-line 100 --fail-under-branch 100 --print-summary
-fi

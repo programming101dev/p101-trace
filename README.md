@@ -1,5 +1,10 @@
 # p101-trace
 
+> **Workflow role:** this binary is the standalone trace-policy reference
+> implementation. The ordinary `p101 analyze` workflow builds one shared run
+> model and `p101 trace ANALYSIS_DIR` renders its trace view without reparsing
+> the event stream.
+
 `p101-trace` reads `P101CALL` records from `lib_env` and turns them into a
 portable, wrapper-level trace. It is the Programming 101 answer to the useful
 parts of `strace` and `ltrace`: not every system call in the process, but every
