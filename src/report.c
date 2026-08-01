@@ -3,6 +3,7 @@
 #include <p101_c/p101_stdio.h>
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
+#include <p101_tool_event/event.h>
 #include <stdlib.h>
 
 static int compare_ranks(const void *left, const void *right);

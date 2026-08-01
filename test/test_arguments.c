@@ -16,6 +16,7 @@
 #include <p101_c/p101_string.h>
 #include <p101_env/env.h>
 #include <p101_error/error.h>
+#include <p101_tool_event/event.h>
 #include <p101_filesystem/filesystem.h>
 #include <p101_io/io.h>
 #include <p101_process/process.h>
