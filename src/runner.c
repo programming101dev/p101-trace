@@ -78,7 +78,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
         if(status == LINE_OK)
         {
             struct p101_tool_event_record observed;
-            struct proc_state            *proc;
+            const struct proc_state      *proc;
 
             p101_memset(env, &observed, 0, sizeof(observed));
             observed.version     = event.version;
