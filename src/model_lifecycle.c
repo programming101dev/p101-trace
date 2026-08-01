@@ -7,6 +7,7 @@ void p101_trace_model_fork(const struct p101_env *env, struct p101_error *err, s
 {
     struct proc_state       *child;
     const struct proc_state *parent;
+    size_t                   parent_index;
 
     if(model == NULL || event == NULL || event->pid < 0 || event->child_pid < 0 || event->pid == event->child_pid)
     {
@@ -14,9 +15,16 @@ void p101_trace_model_fork(const struct p101_env *env, struct p101_error *err, s
         return;
     }
     parent = p101_trace_find_proc(env, err, model, event->pid, event->context_id);
-    child  = p101_trace_find_proc(env, err, model, event->child_pid, event->context_id);
+    if(parent == NULL || p101_error_has_error(err))
+    {
+        model->records++;
+        return;
+    }
+    parent_index = (size_t)(parent - model->procs);
+    child        = p101_trace_find_proc(env, err, model, event->child_pid, event->context_id);
+    parent       = &model->procs[parent_index];
     model->records++;
-    if(parent == NULL || child == NULL || p101_error_has_error(err) || child->depth != 0U)
+    if(child == NULL || p101_error_has_error(err) || child->depth != 0U)
     {
         return;
     }

@@ -973,6 +973,37 @@ static void test_fork_completion_and_stack_integrity_paths(void)
     p101_trace_model_destroy(env, &model);
 }
 
+static void test_fork_reallocation_preserves_parent_stack(void)
+{
+    struct model      *model;
+    struct call_event  event;
+    struct proc_state *child;
+    struct proc_state *parent;
+    long               filler_pid;
+
+    model = p101_trace_model_create(env, error);
+    event = make_event(CALL_EVENT_ENTER, 1, 1U, "ordinary", "-");
+    p101_trace_model_ingest(env, error, model, &event);
+    filler_pid = 100;
+    while(model->proc_count < model->proc_capacity)
+    {
+        TEST_ASSERT_NOT_NULL(p101_trace_find_proc(env, error, model, filler_pid++, 1U));
+    }
+
+    event.kind      = CALL_EVENT_FORK;
+    event.child_pid = filler_pid;
+    p101_trace_model_fork(env, error, model, &event);
+
+    TEST_ASSERT_FALSE(p101_error_has_error(error));
+    parent = p101_trace_find_proc(env, error, model, 1, 1U);
+    child  = p101_trace_find_proc(env, error, model, filler_pid, 1U);
+    TEST_ASSERT_NOT_NULL(parent);
+    TEST_ASSERT_NOT_NULL(child);
+    TEST_ASSERT_EQUAL_UINT(1U, parent->depth);
+    TEST_ASSERT_EQUAL_UINT(1U, child->depth);
+    p101_trace_model_destroy(env, &model);
+}
+
 static void test_reports_cover_tree_flat_summary_slow_and_health_variants(void)
 {
     struct model      *model;
@@ -1227,6 +1258,7 @@ int main(void)
     RUN_TEST(test_identity_reuses_entries_and_reports_allocation_failures);
     RUN_TEST(test_identity_capacity_guards_and_growth_failures);
     RUN_TEST(test_fork_completion_and_stack_integrity_paths);
+    RUN_TEST(test_fork_reallocation_preserves_parent_stack);
     RUN_TEST(test_reports_cover_tree_flat_summary_slow_and_health_variants);
     RUN_TEST(test_rank_comparison_is_total_and_deterministic);
     RUN_TEST(test_open_log_handles_stdin_regular_and_missing_paths);
