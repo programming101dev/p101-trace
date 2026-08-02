@@ -22,6 +22,7 @@ enum line_status
 struct call_event
 {
     int                  version;
+    char                *run_id;
     size_t               sequence;
     long                 pid;
     long                 child_pid;

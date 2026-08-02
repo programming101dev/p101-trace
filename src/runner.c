@@ -82,6 +82,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
 
             p101_memset(env, &observed, 0, sizeof(observed));
             observed.version     = event.version;
+            observed.run_id      = event.run_id;
             observed.record_kind = event.kind == CALL_EVENT_FORK ? P101_TOOL_EVENT_RECORD_FORK : P101_TOOL_EVENT_RECORD_CALL;
             observed.pid         = event.pid;
             observed.context_id  = event.context_id;
@@ -114,6 +115,7 @@ int p101_trace_run(const struct p101_env *env, struct p101_error *err, const str
 
             p101_memset(env, &completion, 0, sizeof(completion));
             completion.version          = event.version;
+            completion.run_id           = event.run_id;
             completion.record_kind      = P101_TOOL_EVENT_RECORD_COMPLETE;
             completion.pid              = event.pid;
             completion.context_id       = event.context_id;

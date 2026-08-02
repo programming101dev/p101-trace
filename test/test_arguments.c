@@ -130,7 +130,7 @@ static void test_parse_rejects_competing_modes(void)
 
 static void test_parse_call_line_accepts_enter_record(void)
 {
-    char              line[] = "P101CALL\t4\t42\t7\t1\t100\t200\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
+    char              line[] = "P101CALL\t5\ttest-run\t42\t7\t1\t100\t200\tENTER\t17\tmain\tp101_open\tpath=/tmp/x\t-\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -161,7 +161,7 @@ static void test_parse_call_line_rejects_old_record(void)
 
 static void test_parse_call_line_rejects_bad_version(void)
 {
-    char              line[] = "P101CALL\t5\t42\t1\t100\t200\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
+    char              line[] = "P101CALL\t4\told-run\t42\t1\t1\t100\t200\tEXIT\t17\tmain\tp101_open\t-\t3\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -172,7 +172,7 @@ static void test_parse_call_line_rejects_bad_version(void)
 
 static void test_parse_call_line_skips_other_records(void)
 {
-    char              line[] = "P101FD\t4\t42\t1\t1\t100\t200\tOPEN\t3\t17\tmain\tserver.c\n";
+    char              line[] = "P101FD\t5\ttest-run\t42\t1\t1\t100\t200\tOPEN\t3\t17\tmain\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -183,7 +183,7 @@ static void test_parse_call_line_skips_other_records(void)
 
 static void test_parse_call_line_skips_generic_resource_records(void)
 {
-    char              line[] = "P101RESOURCE\t4\t42\t7\t1\t100\t200\tACQUIRE\tmapping\t0x1000\t-\t4096\tprivate\t17\tmain\tserver.c\n";
+    char              line[] = "P101RESOURCE\t5\ttest-run\t42\t7\t1\t100\t200\tACQUIRE\tmapping\t0x1000\t-\t4096\tprivate\t17\tmain\tserver.c\n";
     struct call_event event;
     enum line_status  status;
 
@@ -194,11 +194,11 @@ static void test_parse_call_line_skips_generic_resource_records(void)
 
 static void test_parse_completion_record(void)
 {
-    char              line[] = "P101COMPLETE\t4\t42\t7\t2\t160\t260\t1\t0\t0\n";
+    char              line[] = "P101COMPLETE\t5\ttest-run\t42\t7\t2\t160\t260\t1\t0\t0\n";
     struct call_event event;
 
     TEST_ASSERT_EQUAL_INT(LINE_COMPLETE, p101_trace_parse_call_line(env, line, &event));
-    TEST_ASSERT_EQUAL_INT(4, event.version);
+    TEST_ASSERT_EQUAL_INT(P101_TOOL_EVENT_LOG_VERSION, event.version);
     TEST_ASSERT_EQUAL_INT(0, event.write_failed);
 }
 
@@ -428,9 +428,9 @@ static void test_argument_parser_covers_valid_and_invalid_options(void)
 static void test_parser_covers_null_fork_exit_and_malformed_records(void)
 {
     struct call_event event;
-    char              fork_line[] = "P101FORK\t4\t42\t7\t1\t100\t200\t43\t17\tmain\tserver.c\n";
-    char              exit_line[] = "P101CALL\t4\t42\t7\t2\t160\t260\tEXIT\t17\tmain\tp101_open\t-\t-1\tserver.c\n";
-    char              malformed[] = "P101CALL\t4\tbad\n";
+    char              fork_line[] = "P101FORK\t5\ttest-run\t42\t7\t1\t100\t200\t43\t17\tmain\tserver.c\n";
+    char              exit_line[] = "P101CALL\t5\ttest-run\t42\t7\t2\t160\t260\tEXIT\t17\tmain\tp101_open\t-\t-1\tserver.c\n";
+    char              malformed[] = "P101CALL\t5\ttest-run\tbad\n";
     char              other[]     = "ordinary text\n";
 
     TEST_ASSERT_EQUAL_INT(LINE_MALFORMED, p101_trace_parse_call_line(env, NULL, &event));
@@ -1184,8 +1184,8 @@ static void test_open_log_handles_stdin_regular_and_missing_paths(void)
 
 static void test_runner_covers_model_read_and_ingest_failures(void)
 {
-    static const char  call_record[] = "P101CALL\t4\t42\t7\t1\t100\t200\tENTER\t17\tmain\tp101_open\t-\t-\tserver.c\n";
-    static const char  complete_record[] = "P101COMPLETE\t4\t42\t7\t2\t160\t260\t1\t0\t0\n";
+    static const char  call_record[] = "P101CALL\t5\ttest-run\t42\t7\t1\t100\t200\tENTER\t17\tmain\tp101_open\t-\t-\tserver.c\n";
+    static const char  complete_record[] = "P101COMPLETE\t5\ttest-run\t42\t7\t2\t160\t260\t1\t0\t0\n";
     struct arguments   args;
     struct fault_state fault;
     char               path[256];

@@ -27,6 +27,7 @@ enum line_status p101_trace_parse_call_line(const struct p101_env *env, char *li
     }
 
     event->version        = record.version;
+    event->run_id         = record.run_id;
     event->pid            = record.pid;
     event->context_id     = record.context_id;
     event->event_sequence = record.sequence;

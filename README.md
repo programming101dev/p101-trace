@@ -38,10 +38,11 @@ Use `-` as `P101_CALL_LOG` to write the call stream to stderr.
 
 One record per line, tab separated:
 
-    P101CALL <TAB> 4 <TAB> pid <TAB> context <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> ENTER|EXIT <TAB> line <TAB> function <TAB> call <TAB> args <TAB> result <TAB> file
-    P101COMPLETE <TAB> 4 <TAB> pid <TAB> context <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> events-attempted <TAB> write-failed <TAB> write-errno
+    P101CALL <TAB> 5 <TAB> run-id <TAB> pid <TAB> context <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> ENTER|EXIT <TAB> line <TAB> function <TAB> call <TAB> args <TAB> result <TAB> file
+    P101COMPLETE <TAB> 5 <TAB> run-id <TAB> pid <TAB> context <TAB> seq <TAB> mono_ns <TAB> wall_unix_ns <TAB> events-attempted <TAB> write-failed <TAB> write-errno
 
-Version 4 is the only supported format. Other versions are rejected. `seq` is
+Version 5 is the only supported format. Other versions are rejected. `run-id`
+prevents records from separate captures being combined. `seq` is
 the per-environment event sequence.
 `mono_ns` and `wall_unix_ns` are timestamps, or `-` when unavailable. `args` and
 `result` are `-` when not supplied.
@@ -51,7 +52,7 @@ Tabs, newlines, carriage returns, and backslashes inside fields are escaped by
 program output.
 
 An orderly producer writes `P101COMPLETE` when its environment is destroyed.
-A version 4 stream without that receipt, or whose receipt reports a write
+A version 5 stream without that receipt, or whose receipt reports a write
 failure, is incomplete evidence and makes `p101-trace` return tool trouble. This
 distinguishes a truly clean trace from a program that crashed or a log that was
 truncated.

@@ -24,18 +24,18 @@ expect_status() {
 }
 
 cat >"$work/clean.log" <<'EOF'
-P101CALL	4	42	7	1	100	200	ENTER	17	main	p101_open	path=/tmp/x	-	server.c
-P101CALL	4	42	7	2	160	260	EXIT	17	main	p101_open	-	3	server.c
-P101COMPLETE	4	42	7	3	170	270	2	0	0
+P101CALL	5	test-run	42	7	1	100	200	ENTER	17	main	p101_open	path=/tmp/x	-	server.c
+P101CALL	5	test-run	42	7	2	160	260	EXIT	17	main	p101_open	-	3	server.c
+P101COMPLETE	5	test-run	42	7	3	170	270	2	0	0
 EOF
 
 cat >"$work/finding.log" <<'EOF'
-P101CALL	4	42	7	1	100	200	EXIT	17	main	p101_open	-	-1	server.c
-P101COMPLETE	4	42	7	2	170	270	1	0	0
+P101CALL	5	test-run	42	7	1	100	200	EXIT	17	main	p101_open	-	-1	server.c
+P101COMPLETE	5	test-run	42	7	2	170	270	1	0	0
 EOF
 
 cat >"$work/malformed.log" <<'EOF'
-P101CALL	4	bad
+P101CALL	5	test-run	bad
 EOF
 
 cat >"$work/bad-version.log" <<'EOF'
@@ -43,11 +43,11 @@ P101CALL	99	42	7	1	100	200	ENTER	17	main	p101_open	-	-	server.c
 EOF
 
 cat >"$work/fork.log" <<'EOF'
-P101CALL	4	42	7	1	100	200	ENTER	17	main	p101_fork	-	-	server.c
-P101FORK	4	42	7	2	110	210	43	18	main	server.c
-P101CALL	4	42	7	3	120	220	EXIT	17	main	p101_fork	-	43	server.c
-P101COMPLETE	4	42	7	4	170	270	3	0	0
-P101COMPLETE	4	43	7	1	170	270	0	0	0
+P101CALL	5	test-run	42	7	1	100	200	ENTER	17	main	p101_fork	-	-	server.c
+P101FORK	5	test-run	42	7	2	110	210	43	18	main	server.c
+P101CALL	5	test-run	42	7	3	120	220	EXIT	17	main	p101_fork	-	43	server.c
+P101COMPLETE	5	test-run	42	7	4	170	270	3	0	0
+P101COMPLETE	5	test-run	43	7	1	170	270	0	0	0
 EOF
 
 {
